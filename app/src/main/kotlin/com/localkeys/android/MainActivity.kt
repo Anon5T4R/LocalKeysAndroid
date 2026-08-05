@@ -2,7 +2,6 @@ package com.localkeys.android
 
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
@@ -14,12 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.localkeys.android.ui.BiometricRequest
 import com.localkeys.android.ui.VaultViewModel
 import com.localkeys.android.ui.theme.LocalKeysTheme
 import javax.crypto.Cipher
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val viewModel: VaultViewModel by viewModels()
 

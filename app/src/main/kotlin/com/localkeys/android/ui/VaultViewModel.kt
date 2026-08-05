@@ -3,6 +3,7 @@ package com.localkeys.android.ui
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.goterl.lazysodium.LazySodiumAndroid
@@ -22,7 +23,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
-import java.security.KeyPermanentlyInvalidatedException
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 
@@ -50,7 +50,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         val notice: String? = null,
     )
 
-    private val crypto = TkeysCrypto(LazySodiumAndroid(SodiumAndroid(application)))
+    private val crypto = TkeysCrypto(LazySodiumAndroid(SodiumAndroid()))
     private val repository = VaultRepository(crypto)
     private val settings = SettingsStore(application)
     private val biometricKey = BiometricVaultKey()
