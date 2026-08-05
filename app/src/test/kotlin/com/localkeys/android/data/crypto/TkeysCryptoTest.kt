@@ -80,29 +80,26 @@ class TkeysCryptoTest {
         assertEquals(TkeysFormat.NONCE_LEN, header.nonce.size)
     }
 
-    // DIAGNÓSTICO temporário: a chave Kotlin precisa bater com a do Rust do desktop.
+    // A chave derivada (Argon2id, salt/params do fixture) precisa bater 1:1 com a
+    // do desktop (vista via cargo test no crypto.rs do LocalKeys).
     @Test
-    fun diag_kdf_key_hex() {
+    fun kdf_deriva_a_mesma_chave_do_desktop() {
         val header = parseHeader(fixtureBytes())
         val key = crypto.deriveKey(FIXTURE_PASSWORD, header.salt, header.params)
         val actual = Hex.encode(key).lowercase()
-        val expected = "ab168e6e540dd619d6f6af8f10db852810a67789b8023b901fb441b6ea3d1b63"
-        System.err.println("DIAG KDF kotlin=$actual rust=$expected")
+        val expected = "3bae09343f4ede7dc1ea3de521d6d2e035c356c2f04580abcd64f490c35ccc6a"
         assertEquals(expected, actual)
     }
 
-    // DIAGNÓSTICO temporário: recifra o fixture com os MESMOS salt/nonce/chave
-    // do desktop e compara byte a byte. Se bater, a cifragem é idêntica e o bug
-    // está no openWithKey; se não bater, algum input difere.
+    // Recifra o plaintext do fixture com os MESMOS salt/nonce/chave do desktop e
+    // compara byte a byte: prova que a cifragem é idêntica (XChaCha20 + header
+    // como AAD), não só que os dois lados se abrem mutuamente.
     @Test
-    fun diag_aead_recifra_o_fixture() {
+    fun recifragem_do_fixture_e_identica_a_do_desktop() {
         val file = fixtureBytes()
         val header = parseHeader(file)
         val key = crypto.deriveKey(FIXTURE_PASSWORD, header.salt, header.params)
         val rebuilt = crypto.seal(key, header.salt, header.params, header.nonce, FIXTURE_PLAINTEXT.toByteArray())
-        System.err.println("DIAG AEAD rebuilt=${rebuilt.size}B fixture=${file.size}B")
-        val firstDiff = (0 until minOf(rebuilt.size, file.size)).firstOrNull { rebuilt[it] != file[it] }
-        System.err.println("DIAG AEAD firstDiff=$firstDiff rebuiltByte=${firstDiff?.let { "%02X".format(rebuilt[it]) }} fixtureByte=${firstDiff?.let { "%02X".format(file[it]) }}")
         assertEquals("cifragem Kotlin != fixture do desktop", file.toList(), rebuilt.toList())
     }
 
