@@ -109,8 +109,12 @@ dependencies {
     // ── Cripto: libsodium (Argon2id + XChaCha20-Poly1305) ────────────────
     // lazysodium-android traz o libsodium nativo para todos os ABIs; o @aar do
     // JNA é o que entrega as libs nativas do JNA no Android (ver README do
-    // lazysodium-android). O MESMO código roda em teste JVM com lazysodium-java.
-    implementation("com.goterl:lazysodium-android:5.2.0")
+    // lazysodium-android). Excluímos o jna.jar transitivo do POM — senão o
+    // checkDebugDuplicateClasses acusa classes do com.sun.jna repetidas. O MESMO
+    // código roda em teste JVM com lazysodium-java.
+    implementation("com.goterl:lazysodium-android:5.2.0") {
+        exclude(group = "net.java.dev.jna", module = "jna")
+    }
     implementation("net.java.dev.jna:jna:5.17.0@aar")
 
     // ── Biometria (desbloqueio sem senha) ────────────────────────────────
