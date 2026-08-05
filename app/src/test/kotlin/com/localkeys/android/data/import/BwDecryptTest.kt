@@ -97,7 +97,7 @@ class BwDecryptTest {
     fun base64_invalido() {
         val e = assertThrows(ImportError::class.java) {
             BwDecrypt.decryptExport(
-                """{"encrypted":true,"salt":"s","kdfType":0,"kdfIterations":1,"data":"2.@@@.@@@.@@@"}""",
+                """{"encrypted":true,"salt":"s","kdfType":0,"kdfIterations":1,"data":"2.@@@|@@@|@@@"}""",
                 "x",
             )
         }
