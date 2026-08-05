@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LocalKeys</string>
+    <string name="welcome_title">LocalKeys</string>
+    <string name="welcome_subtitle">Gerenciador de senhas 100%% local e offline</string>
+    <string name="welcome_coming_soon">Vault .tkeys, TOTP, autofill e biometria em breve nesta versão.</string>
+</resources>

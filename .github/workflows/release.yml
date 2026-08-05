@@ -1,0 +1,74 @@
+name: Release
+
+# Dispara ao empurrar uma tag vX.Y.Z (a tag deve bater com o versionName do app).
+# workflow_dispatch builda o APK assinado como artifact, sem criar Release.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      # Reconstrói a keystore e o keystore.properties a partir de 2 Secrets:
+      #   KEYSTORE_B64            = base64 do localkeys-android-release.jks
+      #   KEYSTORE_PROPERTIES_B64 = base64 do seu keystore.properties (senhas já corretas)
+      # Assim as senhas não são redigitadas — vêm do arquivo que já funciona local.
+      # A linha storeFile é forçada para o nome do .jks recriado aqui (evita path
+      # absoluto de Windows que não existe no runner Linux).
+      # A chave precisa ser a MESMA das releases anteriores, senão o APK não
+      # instala por cima da versão publicada.
+      - name: Restaurar keystore de assinatura
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PROPERTIES_B64: ${{ secrets.KEYSTORE_PROPERTIES_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PROPERTIES_B64" ]; then
+            echo "::error::Faltam os Secrets KEYSTORE_B64 e/ou KEYSTORE_PROPERTIES_B64. Cadastre em Settings → Secrets and variables → Actions e rode de novo."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > localkeys-android-release.jks
+          echo "$KEYSTORE_PROPERTIES_B64" | base64 -d | grep -v '^storeFile=' > keystore.properties
+          echo "storeFile=localkeys-android-release.jks" >> keystore.properties
+
+      - name: Build release APK (assinado)
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --console=plain
+
+      - name: Renomear APK com a tag
+        run: |
+          mkdir -p out
+          NAME="${GITHUB_REF_NAME:-manual}"
+          cp app/build/outputs/apk/release/app-release.apk "out/LocalKeys-Android-${NAME}.apk"
+
+      - name: Upload do artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: app-release
+          path: out/*.apk
+          if-no-files-found: error
+
+      # Só publica Release quando o gatilho é uma tag.
+      - name: Publicar GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: out/*.apk
+          generate_release_notes: true

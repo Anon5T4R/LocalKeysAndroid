@@ -1,0 +1,30 @@
+# Gradle / build output
+.gradle/
+.kotlin/
+build/
+app/build/
+
+# Local config
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Misc
+*.log
+.DS_Store
+captures/
+
+# Release signing keystore (keep private)
+*.jks
+*.keystore
+
+# Built APK artifacts (distributed via GitHub Releases)
+*.apk
+*.idsig
+
+# Signing secrets (keep private)
+keystore.properties
+
+.claude/
