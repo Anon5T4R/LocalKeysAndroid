@@ -84,9 +84,10 @@ data class Item(
     val login: Login?,
     val card: Card?,
     val identity: Identity?,
-    val passwordHistory: List<PasswordHistoryEntry>,
-    val customFields: List<CustomField>,
-    val attachments: List<Attachment>,
+    // Opcionais no desktop (`types.ts` usa `?`): omitidos no JSON quando ausentes.
+    val passwordHistory: List<PasswordHistoryEntry>?,
+    val customFields: List<CustomField>?,
+    val attachments: List<Attachment>?,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -101,9 +102,9 @@ data class Item(
         login?.let { put("login", it.toJson()) }
         card?.let { put("card", it.toJson()) }
         identity?.let { put("identity", it.toJson()) }
-        if (passwordHistory.isNotEmpty()) put("passwordHistory", JSONArray().apply { passwordHistory.forEach { put(it.toJson()) } })
-        if (customFields.isNotEmpty()) put("customFields", JSONArray().apply { customFields.forEach { put(it.toJson()) } })
-        if (attachments.isNotEmpty()) put("attachments", JSONArray().apply { attachments.forEach { put(it.toJson()) } })
+        passwordHistory?.let { put("passwordHistory", JSONArray().apply { it.forEach { e -> put(e.toJson()) } }) }
+        customFields?.let { put("customFields", JSONArray().apply { it.forEach { e -> put(e.toJson()) } }) }
+        attachments?.let { put("attachments", JSONArray().apply { it.forEach { e -> put(e.toJson()) } }) }
     }
 
     companion object {
@@ -122,13 +123,13 @@ data class Item(
             identity = if (json.isNull("identity")) null else json.optJSONObject("identity")?.let { Identity.parse(it) },
             passwordHistory = json.optJSONArray("passwordHistory")?.let { arr ->
                 (0 until arr.length()).map { PasswordHistoryEntry.parse(arr.getJSONObject(it)) }
-            } ?: emptyList(),
+            },
             customFields = json.optJSONArray("customFields")?.let { arr ->
                 (0 until arr.length()).map { CustomField.parse(arr.getJSONObject(it)) }
-            } ?: emptyList(),
+            },
             attachments = json.optJSONArray("attachments")?.let { arr ->
                 (0 until arr.length()).map { Attachment.parse(arr.getJSONObject(it)) }
-            } ?: emptyList(),
+            },
         )
     }
 }

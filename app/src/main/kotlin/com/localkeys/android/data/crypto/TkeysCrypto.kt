@@ -4,9 +4,7 @@ import com.goterl.lazysodium.LazySodium
 import com.goterl.lazysodium.exceptions.SodiumException
 import com.goterl.lazysodium.interfaces.AEAD
 import com.goterl.lazysodium.interfaces.PwHash
-import com.goterl.lazysodium.utils.Key
 import com.sun.jna.NativeLong
-import javax.crypto.AEADBadTagException
 
 /**
  * Erros do `.tkeys`, espelhando o `CryptoError` do desktop.
@@ -56,22 +54,31 @@ class TkeysCrypto(private val ls: LazySodium) {
     /**
      * Cifra `plaintext` com a chave bruta, sorteando nonce novo e montando
      * `header (60 bytes, em claro, vira AAD) || ciphertext+tag`.
+     *
+     * Usa as variantes `byte[]` do AEAD (`AEAD.Native`): as variantes `String`
+     * codificam a mensagem/AAD em UTF-8, o que quebra a compatibilidade com o
+     * desktop (que cifra os bytes crus do JSON e usa o header binário como AAD).
      */
     fun seal(key: ByteArray, salt: ByteArray, params: KdfParams, plaintext: ByteArray): ByteArray {
         require(key.size == TkeysFormat.KEY_LEN) { "chave deve ter ${TkeysFormat.KEY_LEN} bytes" }
         val nonce = ls.randomBytesBuf(TkeysFormat.NONCE_LEN)
         val header = buildHeader(params, salt, nonce)
-        val cipherHex = ls.encrypt(
-            Hex.encode(plaintext),
-            Hex.encode(header),
-            nonce,
-            Key.fromBytes(key),
-            AEAD.Method.XCHACHA20_POLY1305_IETF,
-        )
-        val cipher = Hex.decode(cipherHex)
-        val out = ByteArray(header.size + cipher.size)
+        val cipher = ByteArray(plaintext.size + AEAD.XCHACHA20POLY1305_IETF_ABYTES)
+        val cipherLen = longArrayOf(0)
+        val ok = try {
+            ls.cryptoAeadXChaCha20Poly1305IetfEncrypt(
+                cipher, cipherLen,
+                plaintext, plaintext.size.toLong(),
+                header, header.size.toLong(),
+                null, nonce, key,
+            )
+        } catch (e: SodiumException) {
+            throw TkeysError.Kdf
+        }
+        if (!ok) throw TkeysError.Kdf
+        val out = ByteArray(header.size + cipherLen[0].toInt())
         header.copyInto(out)
-        cipher.copyInto(out, header.size)
+        cipher.copyInto(out, header.size, 0, cipherLen[0].toInt())
         return out
     }
 
@@ -80,21 +87,23 @@ class TkeysCrypto(private val ls: LazySodium) {
         require(key.size == TkeysFormat.KEY_LEN) { "chave deve ter ${TkeysFormat.KEY_LEN} bytes" }
         val header = parseHeader(file)
         val ciphertext = file.copyOfRange(TkeysFormat.HEADER_LEN, file.size)
+        if (ciphertext.size < AEAD.XCHACHA20POLY1305_IETF_ABYTES) throw TkeysError.Decrypt
         val aad = file.copyOfRange(0, TkeysFormat.HEADER_LEN)
-        val plainHex = try {
-            ls.decrypt(
-                Hex.encode(ciphertext),
-                Hex.encode(aad),
-                header.nonce,
-                Key.fromBytes(key),
-                AEAD.Method.XCHACHA20_POLY1305_IETF,
+        val plaintext = ByteArray(ciphertext.size - AEAD.XCHACHA20POLY1305_IETF_ABYTES)
+        val plainLen = longArrayOf(0)
+        val ok = try {
+            ls.cryptoAeadXChaCha20Poly1305IetfDecrypt(
+                plaintext, plainLen,
+                null,
+                ciphertext, ciphertext.size.toLong(),
+                aad, aad.size.toLong(),
+                header.nonce, key,
             )
-        } catch (e: AEADBadTagException) {
-            throw TkeysError.Decrypt
-        } catch (e: IllegalArgumentException) {
-            throw TkeysError.Decrypt
+        } catch (e: SodiumException) {
+            false
         }
-        return Hex.decode(plainHex)
+        if (!ok) throw TkeysError.Decrypt
+        return plaintext
     }
 
     /**

@@ -19,11 +19,12 @@ object Totp {
         secretB32.trim().replace(" ", "").replace("-", "").uppercase()
 
     /**
-     * Código para o passo `timeStep` (segundos desde a época). Erro se a chave
-     * não for base32 válida. `digits` é parametrizado para os vetores do RFC
-     * 6238 (8 dígitos); em uso real é sempre 6.
+     * Código para o instante `unixSeconds` (segundos desde a época). Erro se a
+     * chave não for base32 válida. `digits` é parametrizado para os vetores do
+     * RFC 6238 (8 dígitos); em uso real é sempre 6. Assim como o `totp-rs` do
+     * desktop, divide o tempo por 30 internamente.
      */
-    fun generate(secretB32: String, timeStep: Long, digits: Int = DIGITS): String {
+    fun generate(secretB32: String, unixSeconds: Long, digits: Int = DIGITS): String {
         val cleaned = sanitize(secretB32)
         if (cleaned.isEmpty()) throw IllegalArgumentException("chave TOTP vazia")
         val keyBytes = Base32.decode(cleaned)
@@ -32,7 +33,7 @@ object Totp {
 
         // Counter (big-endian 64 bits) do passo de tempo.
         val counter = ByteArray(8)
-        var value = timeStep
+        var value = unixSeconds / PERIOD
         for (i in 7 downTo 0) {
             counter[i] = (value and 0xFF).toByte()
             value = value ushr 8
@@ -53,9 +54,8 @@ object Totp {
     /** Código atual + quanto falta para virar. */
     fun now(secretB32: String): TotpCode {
         val unix = System.currentTimeMillis() / 1000
-        val timeStep = unix / PERIOD
         return TotpCode(
-            code = generate(secretB32, timeStep, DIGITS),
+            code = generate(secretB32, unix, DIGITS),
             period = PERIOD,
             secondsRemaining = PERIOD - (unix % PERIOD),
         )
