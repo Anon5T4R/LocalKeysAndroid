@@ -86,6 +86,7 @@ class TkeysCryptoTest {
         val key = crypto.deriveKey(FIXTURE_PASSWORD, header.salt, header.params)
         val actual = Hex.encode(key)
         val expected = "9853e9de2809f7ead4ded8f4f73e3f9542e56b499c1255926cbe82b0e7ed5ed9"
+        System.err.println("DIAG KDF kotlin=$actual rust=$expected")
         if (actual != expected) {
             throw AssertionError("KDF kotlin=$actual rust=$expected")
         }

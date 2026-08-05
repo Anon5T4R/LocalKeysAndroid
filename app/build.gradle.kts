@@ -74,6 +74,8 @@ android {
             // que carrega o libsodium nativo via resource-loader — nada de stubs.
             isReturnDefaultValues = false
             isIncludeAndroidResources = false
+            // stdout/stderr dos testes aparecem no log do CI (essencial p/ depurar).
+            all { it.testLogging.showStandardStreams = true }
         }
     }
 
