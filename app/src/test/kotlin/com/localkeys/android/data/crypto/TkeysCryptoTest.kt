@@ -33,19 +33,20 @@ class TkeysCryptoTest {
                 """[{"id":"i1","kind":"login","name":"gmail","favorite":false,"folderId":"f1","notes":"conta principal","createdAt":1710000000000,"updatedAt":1710000000000,"deletedAt":null,"login":{"username":"joao@gmail.com","password":"hunter2","uris":["https://gmail.com"],"totp":"JBSWY3DPEHPK3PXP"},"passwordHistory":[],"customFields":[],"attachments":[]},""" +
                 """{"id":"i2","kind":"note","name":"Wi-Fi","favorite":true,"folderId":null,"notes":"SSID: casa\nPW: rede123","createdAt":1710000000001,"updatedAt":1710000000001,"deletedAt":null}]}"""
 
-        // Gerado com: cargo test dump_android_fixture --lib (desktop, v0.8.0).
+        // Gerado com: cargo test diag_dump_android_fixture --lib (desktop v0.8.0).
         val FIXTURE_BASE64: String =
-            "VEtFWVMAAQEAAgAAAQAAAAEAAABwIbAgKN03fWZ6neqW8qsXmdBRHQvDhj4Nt9F/ytMtxEM+" +
-                "M1vSTbT9IT1LGB4ZWifHzqk4b9xv29BydA7jWuptw82wPGwkdDYLz8YXJIeWCDKzpy2DmV8G7IRrx3xKU5e5oVG7+" +
-                "h3dPys6PAZ08grf3kXKD0TdXvkakY5vVmq7faOUwwMUfAqEKjA8NJgbB3IqsgtcfKcaHwCTj++diYSkwSWAo0U" +
-                "MtfpPorD9NOwO/V9R8kiClQ30k2v5JLPsPFkVyLw/zDW4vOFH8+XFxvXwTwSmnr61Ixre7CzNaWIFfH0beo+T/" +
-                "lk5ipBPtxEyc5/yaxA6S9zeVKTSREFVGFqAS0l27YYTZw4jv2Qoo4d+Xt6sX/Vxwo/gu/w8saVp4Mb2ZkadyZK" +
-                "kFvm8LiWpaVM+/O54t4TjFcI2PrlmSEME2fJTrQHp9c8t9Kx+P+/TJBQ6pkXF4hOaHngIv+EeFvt85TPUEKtl7j" +
-                "yvwtn/QDtsJ9LvXVupC9CpufqkxWUAd81p6NUoZ3M9qNB4z56Yi8N2pb/iqz1LFVK0GnavIyTn5KRVMB8Kn5Xv" +
-                "4mYY8QXB/2pwygzwp7ynMRC/Uz6nqv8iwyOvxYzdGc+fOtK58IYsQdXGecnJQSbTWlMxskeg3DzCL4swLpMmO" +
-                "bkZyr3scIY2+gqP/csb93+IQnoDQpPFRB6C2RftWzMY9+yTBixjXXI1A+xWD8usLDfrLa6KNNnPnVJ5KglZ4HQ" +
-                "2rZSVTL42bGgZcnHi3SonmcjI0nX/x3LeNXCJlC3LmlLOoYipiEqY9GEDKTYxex2ik9wX1rNuvcds93IgJsYRn" +
-                "AbZWSBQn+NP59IzH89MHfD/9YU="
+            "VEtFWVMAAQEAAgAAAQAAAAEAAABVRbyVYVNp4JiO4L8yKOZA5KpVKIQGBMRNNy5e9uuoh2J7ifEC" +
+            "WNNDDoSzS5z+WcsWvZfe9qiOnP9ipNnX+Zz/Lt9jmPGD4K1rORD5S5ODFG2BW4BPRv72WGE9WuCY" +
+            "IioOQpOCxyy2Ewkxwy69DOp0EnpLsvMYr3KfoVQHtrZLq3zLJkfFwcVHd5D+1C4QjRfFeVriSGxM" +
+            "8bs36HnNWEWGzCMVRCx9E5VQeGAnlxSWzDjHy0KSiRM75otRh11mz2BFe3UwX1N13nWHqxZMzAbC" +
+            "aXXxNjhcK637Q5zItTDNFnqYTsX5VM9F3fWu2ykZ5aNtxtsqUQVKnZtovlCl8CCrmQ89iPQIFpAg" +
+            "ddg1pyAaeo6/JF8WuFTAXUWZkrUlG5e3TI8YxrNy6CnQkht4AqChl+ZIvujR6LLWL+ggfwBCyCsE" +
+            "baS769PalQRqxAiSsKHd/0yoCiFoRdObeZxq0XbNo5PvZ9zsGxCY2uGL/3505wZC3zoyDReu16Q8" +
+            "KouvJoqZmRwftbgboqT7s8F5jWZigUfo29dYsL5rOpEWJ6rqNFbpAIWtLPSE0bG+78rufcrZ/P9U" +
+            "pVuyR90wBD1nSFYx4cAp1lC0lyqaxoV+VhjpJ9BB7DYWK+GQwYi+dczlKtCHICXP5WCOfMaH2a8Q" +
+            "JdzSsT4GTwzi73bFr0tXrkoWWN6UZfzH1CabrY1WsZFlPMxKnZMyfX9Dmq8mOjsZypcwIVWmg+zb" +
+            "G3IoCVsIOeuwWiB+hd6NYEsFe3zJcrXnoAt9ujk7CyK9XunNTHs9VY0GC4zNt3mZx8bGwxXLxyyF" +
+            "7eilBzbedlxCtcpeYlS79v2lwBRf8NRqaNMzokQ="
 
         fun fixtureBytes(): ByteArray =
             Base64.getDecoder().decode(FIXTURE_BASE64)
