@@ -127,11 +127,7 @@ class TkeysCryptoTest {
     fun nonces_sao_unicos_por_cifragem() {
         val a = crypto.createVault("pw", "identico".toByteArray(), TEST_PARAMS)
         val b = crypto.createVault("pw", "identico".toByteArray(), TEST_PARAMS)
-        assertNotEquals(
-            a.file.copyOfRange(36, 60).toList(),
-            b.file.copyOfRange(36, 60).toList(),
-            "nonces deveriam diferir",
-        )
+        assertNotEquals(a.file.copyOfRange(36, 60).toList(), b.file.copyOfRange(36, 60).toList())
         assertNotEquals(a.file.toList(), b.file.toList())
     }
 

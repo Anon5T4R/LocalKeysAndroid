@@ -35,8 +35,7 @@ class VaultTest {
         assertEquals("conta principal", login.notes)
         assertEquals(1710000000000, login.createdAt)
         assertNull(login.deletedAt)
-        val lg = login.login
-        assertTrue(lg != null)
+        val lg = login.login!!
         assertEquals("joao@gmail.com", lg.username)
         assertEquals("hunter2", lg.password)
         assertEquals(listOf("https://gmail.com"), lg.uris)
