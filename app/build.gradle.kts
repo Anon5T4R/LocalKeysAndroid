@@ -82,6 +82,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // bcprov-jdk18on e o transitivo jspecify trazem o mesmo manifest OSGi
+            // multi-release; conteúdo irrelevante em runtime, só duplica no merge.
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
 }
