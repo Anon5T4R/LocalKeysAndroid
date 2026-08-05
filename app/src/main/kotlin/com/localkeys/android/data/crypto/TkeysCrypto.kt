@@ -88,6 +88,17 @@ class TkeysCrypto(private val ls: LazySodium) {
         return out
     }
 
+    /**
+     * Abre um `.tkeys` com a **chave bruta** (ex.: recuperada do cofre
+     * biométrico do SO). Devolve plaintext + sessão viva (salt/params do
+     * arquivo) — o caminho do desbloqueio rápido, sem re-rodar o Argon2.
+     */
+    fun openVaultWithKey(key: ByteArray, file: ByteArray): OpenedVault {
+        val header = parseHeader(file)
+        val plaintext = openWithKey(key, file)
+        return OpenedVault(plaintext, SessionKey(ls, key, header.salt, header.params))
+    }
+
     /** Decifra um `.tkeys` com a **chave bruta** (sem re-rodar o Argon2). */
     fun openWithKey(key: ByteArray, file: ByteArray): ByteArray {
         require(key.size == TkeysFormat.KEY_LEN) { "chave deve ter ${TkeysFormat.KEY_LEN} bytes" }

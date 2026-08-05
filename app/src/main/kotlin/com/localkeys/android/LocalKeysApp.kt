@@ -1,43 +1,76 @@
 package com.localkeys.android
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import com.localkeys.android.ui.BiometricRequest
+import com.localkeys.android.ui.CreateScreen
+import com.localkeys.android.ui.UnlockScreen
+import com.localkeys.android.ui.VaultScreen
+import com.localkeys.android.ui.VaultViewModel
 
+/**
+ * Raiz da navegação:
+ *  - Sem cofre ainda: [UnlockScreen] (abrir/criar) + [CreateScreen] (senha nova).
+ *  - Vault destrancado (VM): [VaultScreen] com a lista de itens e TOTP ao vivo.
+ *
+ * Os gatilhos de SAF (abrir/criar documento) e de BiometricPrompt vivem na
+ * [MainActivity] e chegam como lambdas.
+ */
 @Composable
-fun LocalKeysApp(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.welcome_title),
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
+fun LocalKeysApp(
+    viewModel: VaultViewModel,
+    onPickDocument: () -> Unit,
+    onCreateDocument: (String) -> Unit,
+    onRequestBiometric: (BiometricRequest) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val state by viewModel.state.collectAsState()
+    var showCreate by rememberSaveable { mutableStateOf(false) }
+
+    when (state.screen) {
+        VaultViewModel.Screen.Vault -> VaultScreen(
+            vault = state.vault ?: return,
+            biometricAvailable = state.biometricAvailable,
+            busy = state.busy,
+            error = state.error,
+            notice = state.notice,
+            onSave = viewModel::save,
+            onLock = viewModel::lock,
+            onEnableBiometric = { onRequestBiometric(BiometricRequest.Wrap) },
+            onDisableBiometric = viewModel::disableBiometric,
+            onNoticeShown = viewModel::consumeNotice,
+            modifier = modifier,
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.welcome_subtitle),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = stringResource(R.string.welcome_coming_soon),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+
+        VaultViewModel.Screen.Unlock -> if (showCreate) {
+            CreateScreen(
+                busy = state.busy,
+                error = state.error,
+                onBack = {
+                    showCreate = false
+                    viewModel.clearError()
+                },
+                onCreate = { password ->
+                    viewModel.clearError()
+                    onCreateDocument(password)
+                },
+                modifier = modifier,
+            )
+        } else {
+            UnlockScreen(
+                state = state,
+                onPickVault = onPickDocument,
+                onCreateVault = { showCreate = true },
+                onUnlock = viewModel::unlock,
+                onBiometricUnlock = { onRequestBiometric(BiometricRequest.Unlock) },
+                onErrorShown = viewModel::clearError,
+                modifier = modifier,
+            )
+        }
     }
 }

@@ -1,7 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">LocalKeys</string>
-    <string name="welcome_title">LocalKeys</string>
-    <string name="welcome_subtitle">Gerenciador de senhas 100%% local e offline</string>
-    <string name="welcome_coming_soon">Vault .tkeys, TOTP, autofill e biometria em breve nesta versão.</string>
+
+    <!-- Desbloquear / abrir -->
+    <string name="unlock_subtitle">Gerenciador de senhas 100%% local e offline</string>
+    <string name="unlock_no_vault">Comece abrindo um cofre .tkeys existente ou criando um novo.</string>
+    <string name="unlock_open">Abrir cofre existente</string>
+    <string name="unlock_create">Criar cofre novo</string>
+    <string name="unlock_biometric">Desbloquear com biometria</string>
+    <string name="unlock_password">Senha-mestra</string>
+    <string name="unlock_show">Mostrar senha</string>
+    <string name="unlock_hide">Ocultar senha</string>
+    <string name="unlock_button">Desbloquear</string>
+    <string name="unlock_change_vault">Escolher outro cofre</string>
+
+    <!-- Criar cofre -->
+    <string name="create_title">Criar cofre</string>
+    <string name="create_subtitle">Escolha uma senha-mestra forte. Sem ela, o cofre não abre em lugar nenhum.</string>
+    <string name="create_password">Senha-mestra</string>
+    <string name="create_confirm">Confirme a senha</string>
+    <string name="create_password_short">Use pelo menos 8 caracteres.</string>
+    <string name="create_mismatch">As senhas não conferem.</string>
+    <string name="create_button">Criar cofre</string>
+    <string name="create_back">Voltar</string>
+
+    <!-- Cofre aberto -->
+    <string name="vault_save">Salvar</string>
+    <string name="vault_lock">Travar</string>
+    <string name="vault_empty">Seu cofre está vazio. Crie os itens no desktop e salve aqui.</string>
+
+    <!-- Biometria -->
+    <string name="biometric_title">Desbloqueio biométrico</string>
+    <string name="biometric_hint">Ative para abrir o cofre com o dedo/rosto, sem digitar a senha.</string>
+    <string name="biometric_active">Ativo. A senha-mestra não precisa ser digitada no próximo acesso.</string>
+    <string name="biometric_enable">Ativar</string>
+    <string name="biometric_disable">Desativar</string>
+    <string name="biometric_prompt_title">Desbloquear o cofre</string>
+    <string name="biometric_prompt_subtitle">Confirme sua identidade para abrir o LocalKeys</string>
+    <string name="biometric_prompt_cancel">Cancelar</string>
+    <string name="biometric_unavailable">Biometria indisponível: %1$s</string>
+
+    <!-- Detalhe do item / cópia -->
+    <string name="dialog_copy">Copiar</string>
+    <string name="dialog_close">Fechar</string>
+    <string name="copy_copied">Copiado</string>
+    <string name="field_username">Usuário</string>
+    <string name="field_password">Senha</string>
+    <string name="field_uri">Site</string>
+    <string name="field_note">Nota</string>
+    <string name="field_cardholder">Titular</string>
+    <string name="field_brand">Bandeira</string>
+    <string name="field_number">Número</string>
+    <string name="field_exp">Validade</string>
+    <string name="field_code">Código</string>
+    <string name="field_first_name">Nome</string>
+    <string name="field_last_name">Sobrenome</string>
+    <string name="field_email">E-mail</string>
+    <string name="field_phone">Telefone</string>
+    <string name="field_address">Endereço</string>
+    <string name="field_notes">Notas</string>
 </resources>
