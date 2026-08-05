@@ -151,4 +151,25 @@ class VaultRepositoryTest {
         assertThrows(IllegalStateException::class.java) { repository.vault }
         assertThrows(IllegalStateException::class.java) { repository.save() }
     }
+
+    @Test
+    fun append_items_importados_entram_no_vault_atual() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val imported = Item(
+            id = "imp1", kind = ItemKind.LOGIN, name = "Importado", favorite = false,
+            folderId = null, notes = "", createdAt = 1, updatedAt = 1, deletedAt = null,
+            login = Login(username = "u", password = "p", uris = listOf("https://x"), totp = ""),
+            card = null, identity = null, passwordHistory = emptyList(),
+            customFields = emptyList(), attachments = emptyList(),
+        )
+        val merged = repository.appendItems(listOf(imported))
+        assertEquals(3, merged.items.size)
+        assertEquals("Importado", repository.vault.items[2].name)
+
+        // O append não muda o arquivo: salvar recifra o estado novo.
+        val saved = repository.save()
+        val reopened = Vault.parse(String(crypto.openVault(TkeysCryptoTest.FIXTURE_PASSWORD, saved).plaintext))
+        assertEquals(3, reopened.items.size)
+        assertEquals("imp1", reopened.items[2].id)
+    }
 }

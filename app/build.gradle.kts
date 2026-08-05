@@ -120,6 +120,11 @@ dependencies {
     // ── Biometria (desbloqueio sem senha) ────────────────────────────────
     implementation("androidx.biometric:biometric:1.1.0")
 
+    // ── Import: Argon2id do Bitwarden (export cifrado) ───────────────────
+    // A JVM/Android não tem Argon2 no JCE; o BouncyCastle é a implementação
+    // auditada. Usado só como classe (nunca registrado como provider do SO).
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+
     // ── SAF (abrir/criar o vault .tkeys no armazenamento do usuário) ─────
     implementation("androidx.documentfile:documentfile:1.0.1")
 
@@ -136,6 +141,8 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("com.goterl:lazysodium-java:5.1.4")
+    // BouncyCastle roda puro na JVM (mesmo código do Argon2id do app).
+    testImplementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 
     // ── Debug / preview ──────────────────────────────────────────────────
     debugImplementation("androidx.compose.ui:ui-tooling")

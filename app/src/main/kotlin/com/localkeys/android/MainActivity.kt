@@ -40,6 +40,11 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+    private val importLauncher: ActivityResultLauncher<Array<String>> =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) viewModel.onImportUriChosen(uri)
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -54,6 +59,9 @@ class MainActivity : FragmentActivity() {
                         onCreateDocument = { password ->
                             pendingCreatePassword = password
                             createVaultLauncher.launch("localkeys.tkeys")
+                        },
+                        onPickImport = {
+                            importLauncher.launch(arrayOf("*/*"))
                         },
                         onRequestBiometric = ::launchBiometric,
                         modifier = Modifier.padding(innerPadding),

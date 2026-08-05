@@ -26,6 +26,7 @@ fun LocalKeysApp(
     viewModel: VaultViewModel,
     onPickDocument: () -> Unit,
     onCreateDocument: (String) -> Unit,
+    onPickImport: () -> Unit,
     onRequestBiometric: (BiometricRequest) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -39,10 +40,14 @@ fun LocalKeysApp(
             busy = state.busy,
             error = state.error,
             notice = state.notice,
+            pendingImport = state.pendingImport,
             onSave = viewModel::save,
             onLock = viewModel::lock,
             onEnableBiometric = { onRequestBiometric(BiometricRequest.Wrap) },
             onDisableBiometric = viewModel::disableBiometric,
+            onPickImport = onPickImport,
+            onImportPassword = viewModel::onImportPassword,
+            onDismissImport = viewModel::dismissImport,
             onNoticeShown = viewModel::consumeNotice,
             modifier = modifier,
         )

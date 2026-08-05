@@ -19,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -39,6 +40,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.localkeys.android.R
 import com.localkeys.android.data.totp.Totp
@@ -46,6 +49,7 @@ import com.localkeys.android.data.totp.TotpCode
 import com.localkeys.android.data.vault.Item
 import com.localkeys.android.data.vault.ItemKind
 import com.localkeys.android.data.vault.Vault
+import com.localkeys.android.ui.VaultViewModel.PendingImport
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,10 +60,14 @@ fun VaultScreen(
     busy: Boolean,
     error: String?,
     notice: String?,
+    pendingImport: PendingImport?,
     onLock: () -> Unit,
     onSave: () -> Unit,
     onEnableBiometric: () -> Unit,
     onDisableBiometric: () -> Unit,
+    onPickImport: () -> Unit,
+    onImportPassword: (String) -> Unit,
+    onDismissImport: () -> Unit,
     onNoticeShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -94,6 +102,9 @@ fun VaultScreen(
             TopAppBar(
                 title = { Text(stringResource(com.localkeys.android.R.string.app_name)) },
                 actions = {
+                    TextButton(onClick = onPickImport, enabled = !busy) {
+                        Text(stringResource(com.localkeys.android.R.string.vault_import))
+                    }
                     TextButton(onClick = onSave, enabled = !busy) {
                         Text(stringResource(com.localkeys.android.R.string.vault_save))
                     }
@@ -146,6 +157,87 @@ fun VaultScreen(
     selected?.let { item ->
         ItemDetailDialog(item = item, onCopy = copy, onDismiss = { selected = null })
     }
+
+    pendingImport?.let { pending ->
+        ImportDialog(
+            pending = pending,
+            busy = busy,
+            error = error,
+            onConfirm = onImportPassword,
+            onDismiss = onDismissImport,
+        )
+    }
+}
+
+/**
+ * Export cifrado do Bitwarden: pede a senha do próprio Bitwarden (não a do
+ * cofre) para decifrar antes de importar.
+ */
+@Composable
+private fun ImportDialog(
+    pending: PendingImport,
+    busy: Boolean,
+    error: String?,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var password by remember { mutableStateOf("") }
+    var show by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(com.localkeys.android.R.string.import_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(com.localkeys.android.R.string.import_file, pending.fileName),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(com.localkeys.android.R.string.import_encrypted_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(com.localkeys.android.R.string.import_password_label)) },
+                    singleLine = true,
+                    visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        TextButton(onClick = { show = !show }) {
+                            Text(
+                                stringResource(
+                                    if (show) com.localkeys.android.R.string.unlock_hide
+                                    else com.localkeys.android.R.string.unlock_show
+                                ),
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(password) }, enabled = password.isNotBlank() && !busy) {
+                Text(stringResource(com.localkeys.android.R.string.import_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(com.localkeys.android.R.string.import_cancel))
+            }
+        },
+    )
 }
 
 @Composable

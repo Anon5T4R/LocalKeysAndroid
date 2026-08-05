@@ -27,7 +27,16 @@
     <!-- Cofre aberto -->
     <string name="vault_save">Salvar</string>
     <string name="vault_lock">Travar</string>
+    <string name="vault_import">Importar</string>
     <string name="vault_empty">Seu cofre está vazio. Crie os itens no desktop e salve aqui.</string>
+
+    <!-- Importar de outro gerenciador -->
+    <string name="import_title">Importar de outro gerenciador</string>
+    <string name="import_file">Arquivo: %1$s</string>
+    <string name="import_encrypted_hint">Este export está cifrado. Digite a senha usada para exportá-lo.</string>
+    <string name="import_password_label">Senha do Bitwarden</string>
+    <string name="import_confirm">Importar</string>
+    <string name="import_cancel">Cancelar</string>
 
     <!-- Biometria -->
     <string name="biometric_title">Desbloqueio biométrico</string>

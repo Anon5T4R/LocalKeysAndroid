@@ -3,6 +3,7 @@ package com.localkeys.android.ui
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,7 +13,13 @@ import com.localkeys.android.data.biometric.BiometricVaultKey
 import com.localkeys.android.data.crypto.Hex
 import com.localkeys.android.data.crypto.TkeysCrypto
 import com.localkeys.android.data.crypto.TkeysError
+import com.localkeys.android.data.import.BitwardenImport
+import com.localkeys.android.data.import.BwDecrypt
+import com.localkeys.android.data.import.ImportError
+import com.localkeys.android.data.import.ImportFormat
+import com.localkeys.android.data.import.Importers
 import com.localkeys.android.data.store.SettingsStore
+import com.localkeys.android.data.vault.Item
 import com.localkeys.android.data.vault.Vault
 import com.localkeys.android.data.vault.VaultRepository
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +47,12 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         data object Vault : Screen
     }
 
+    /** Import em andamento: arquivo escolhido + se precisa da senha do export. */
+    data class PendingImport(
+        val fileName: String,
+        val needsPassword: Boolean,
+    )
+
     data class UiState(
         val screen: Screen = Screen.Unlock,
         val vault: Vault? = null,
@@ -48,6 +61,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         val busy: Boolean = false,
         val error: String? = null,
         val notice: String? = null,
+        val pendingImport: PendingImport? = null,
     )
 
     private val crypto = TkeysCrypto(LazySodiumAndroid(SodiumAndroid()))
@@ -61,6 +75,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     private var cachedBlob: ByteArray? = null
     private var wrappedKeyHex: String? = null
     private var biometricOn: Boolean = false
+    private var encryptedImport: String? = null
 
     init {
         viewModelScope.launch {
@@ -247,6 +262,113 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             settings.setBiometricEnabled(false)
             settings.setWrappedKeyHex(null)
             _state.update { it.copy(biometricAvailable = false) }
+        }
+    }
+
+    // ── Importar de outro gerenciador ────────────────────────────────────
+
+    /** Arquivo escolhido no SAF: detecta formato e importa ou pede a senha. */
+    fun onImportUriChosen(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(busy = true, error = null) }
+            try {
+                val resolver = getApplication<Application>().contentResolver
+                val fileName = resolver.query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                val content = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?.toString(Charsets.UTF_8) ?: throw IOException("arquivo não encontrado")
+
+                when (val format = Importers.detectFormat(fileName, content)) {
+                    ImportFormat.KDBX -> throw ImportError(
+                        "Import de KeePass (.kdbx) ainda não é suportado no Android. " +
+                            "Exporte o cofre em CSV ou JSON e importe de novo.",
+                    )
+                    ImportFormat.BITWARDEN_ENCRYPTED -> {
+                        encryptedImport = content
+                        _state.update {
+                            it.copy(
+                                busy = false,
+                                pendingImport = PendingImport(fileName ?: "export bitwarden", needsPassword = true),
+                            )
+                        }
+                    }
+                    else -> performImport(Importers.parseText(content, format), fileName)
+                }
+            } catch (e: Exception) {
+                encryptedImport = null
+                _state.update {
+                    it.copy(busy = false, pendingImport = null, error = e.message ?: "Falha ao importar.")
+                }
+            }
+        }
+    }
+
+    /** Senha do export cifrado do Bitwarden: decifra, parseia e importa. */
+    fun onImportPassword(password: String) {
+        val json = encryptedImport ?: return
+        if (password.isBlank()) {
+            _state.update { it.copy(error = "Digite a senha do export.") }
+            return
+        }
+        viewModelScope.launch(Dispatchers.Default) {
+            _state.update { it.copy(busy = true, error = null) }
+            try {
+                val plain = BwDecrypt.decryptExport(json, password)
+                performImport(BitwardenImport.parse(plain), null)
+            } catch (e: Exception) {
+                // Senha errada: mantém o diálogo aberto para tentar de novo.
+                _state.update { it.copy(busy = false, error = e.message ?: "Falha ao importar.") }
+            }
+        }
+    }
+
+    /** Cancela o import pendente. */
+    fun dismissImport() {
+        encryptedImport = null
+        _state.update { it.copy(pendingImport = null) }
+    }
+
+    /** Anexa os itens ao vault, recifra e grava no arquivo. */
+    private suspend fun performImport(items: List<Item>, fileName: String?) {
+        if (items.isEmpty()) {
+            _state.update {
+                it.copy(
+                    busy = false,
+                    pendingImport = null,
+                    notice = "Nenhum item para importar${fileName?.let { " em $it" } ?: ""}.",
+                )
+            }
+            return
+        }
+        try {
+            val merged = repository.appendItems(items)
+            val file = repository.save()
+            val uri = _state.value.vaultUri
+                ?: throw IOException("cofre não está associado a um arquivo")
+            val written = withContext(Dispatchers.IO) {
+                getApplication<Application>().contentResolver
+                    .openOutputStream(Uri.parse(uri))?.use { it.write(file) } != null
+            }
+            if (!written) throw IOException("não foi possível gravar o cofre")
+            encryptedImport = null
+            _state.update {
+                it.copy(
+                    busy = false,
+                    pendingImport = null,
+                    vault = merged,
+                    notice = "${items.size} itens importados.",
+                )
+            }
+        } catch (e: Exception) {
+            encryptedImport = null
+            _state.update {
+                it.copy(busy = false, pendingImport = null, error = "Falha ao importar: ${e.message}")
+            }
         }
     }
 

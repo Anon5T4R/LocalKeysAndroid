@@ -62,6 +62,17 @@ class VaultRepository(private val crypto: TkeysCrypto) {
     /** Cópia da chave derivada (32 bytes) para o cofre biométrico. */
     fun keyBytes(): ByteArray? = session?.keyBytes()
 
+    /**
+     * Anexa itens importados ao vault atual (em memória) e devolve o vault novo.
+     * A gravação no arquivo é responsabilidade do chamador (`save`).
+     */
+    fun appendItems(items: List<Item>): Vault {
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val merged = v.copy(items = v.items + items)
+        current = merged
+        return merged
+    }
+
     /** Descarta a sessão e o plaintext (travar o cofre). */
     fun lock() {
         session = null
