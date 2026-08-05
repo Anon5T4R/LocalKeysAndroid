@@ -79,6 +79,14 @@ class TkeysCryptoTest {
         assertEquals(TkeysFormat.NONCE_LEN, header.nonce.size)
     }
 
+    // DIAGNÓSTICO temporário: a chave Kotlin precisa bater com a do Rust do desktop.
+    @Test
+    fun diag_kdf_key_hex() {
+        val header = parseHeader(fixtureBytes())
+        val key = crypto.deriveKey(FIXTURE_PASSWORD, header.salt, header.params)
+        assertEquals("9853e9de2809f7ead4ded8f4f73e3f9542e56b499c1255926cbe82b0e7ed5ed9", Hex.encode(key))
+    }
+
     @Test
     fun abre_com_chave_bruta_derivada() {
         val header = parseHeader(fixtureBytes())
