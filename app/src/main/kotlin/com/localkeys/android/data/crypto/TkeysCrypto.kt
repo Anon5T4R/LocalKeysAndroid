@@ -60,8 +60,14 @@ class TkeysCrypto(private val ls: LazySodium) {
      * desktop (que cifra os bytes crus do JSON e usa o header binário como AAD).
      */
     fun seal(key: ByteArray, salt: ByteArray, params: KdfParams, plaintext: ByteArray): ByteArray {
-        require(key.size == TkeysFormat.KEY_LEN) { "chave deve ter ${TkeysFormat.KEY_LEN} bytes" }
         val nonce = ls.randomBytesBuf(TkeysFormat.NONCE_LEN)
+        return seal(key, salt, params, nonce, plaintext)
+    }
+
+    /** Cifra com um nonce dado (para testes de compatibilidade byte a byte). */
+    fun seal(key: ByteArray, salt: ByteArray, params: KdfParams, nonce: ByteArray, plaintext: ByteArray): ByteArray {
+        require(key.size == TkeysFormat.KEY_LEN) { "chave deve ter ${TkeysFormat.KEY_LEN} bytes" }
+        require(nonce.size == TkeysFormat.NONCE_LEN) { "nonce deve ter ${TkeysFormat.NONCE_LEN} bytes" }
         val header = buildHeader(params, salt, nonce)
         val cipher = ByteArray(plaintext.size + AEAD.XCHACHA20POLY1305_IETF_ABYTES)
         val cipherLen = longArrayOf(0)

@@ -84,12 +84,25 @@ class TkeysCryptoTest {
     fun diag_kdf_key_hex() {
         val header = parseHeader(fixtureBytes())
         val key = crypto.deriveKey(FIXTURE_PASSWORD, header.salt, header.params)
-        val actual = Hex.encode(key)
-        val expected = "9853e9de2809f7ead4ded8f4f73e3f9542e56b499c1255926cbe82b0e7ed5ed9"
+        val actual = Hex.encode(key).lowercase()
+        val expected = "ab168e6e540dd619d6f6af8f10db852810a67789b8023b901fb441b6ea3d1b63"
         System.err.println("DIAG KDF kotlin=$actual rust=$expected")
-        if (actual != expected) {
-            throw AssertionError("KDF kotlin=$actual rust=$expected")
-        }
+        assertEquals(expected, actual)
+    }
+
+    // DIAGNÓSTICO temporário: recifra o fixture com os MESMOS salt/nonce/chave
+    // do desktop e compara byte a byte. Se bater, a cifragem é idêntica e o bug
+    // está no openWithKey; se não bater, algum input difere.
+    @Test
+    fun diag_aead_recifra_o_fixture() {
+        val file = fixtureBytes()
+        val header = parseHeader(file)
+        val key = crypto.deriveKey(FIXTURE_PASSWORD, header.salt, header.params)
+        val rebuilt = crypto.seal(key, header.salt, header.params, header.nonce, FIXTURE_PLAINTEXT.toByteArray())
+        System.err.println("DIAG AEAD rebuilt=${rebuilt.size}B fixture=${file.size}B")
+        val firstDiff = (0 until minOf(rebuilt.size, file.size)).firstOrNull { rebuilt[it] != file[it] }
+        System.err.println("DIAG AEAD firstDiff=$firstDiff rebuiltByte=${firstDiff?.let { "%02X".format(rebuilt[it]) }} fixtureByte=${firstDiff?.let { "%02X".format(file[it]) }}")
+        assertEquals("cifragem Kotlin != fixture do desktop", file.toList(), rebuilt.toList())
     }
 
     @Test
