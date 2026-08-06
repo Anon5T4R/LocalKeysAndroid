@@ -1,5 +1,6 @@
 package com.localkeys.android.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,12 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CreditCard
@@ -27,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -63,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import com.localkeys.android.R
 import com.localkeys.android.data.totp.Totp
 import com.localkeys.android.data.totp.TotpCode
+import com.localkeys.android.data.vault.Folder
 import com.localkeys.android.data.vault.Item
 import com.localkeys.android.data.vault.ItemKind
 import com.localkeys.android.data.vault.Vault
@@ -90,6 +97,9 @@ fun VaultScreen(
     onSaveItem: (Item) -> Unit,
     onDeleteItem: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onAddFolder: (String) -> Unit,
+    onRenameFolder: (String, String) -> Unit,
+    onDeleteFolder: (String) -> Unit,
     onNoticeShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,7 +115,10 @@ fun VaultScreen(
     var editing by remember { mutableStateOf<Item?>(null) }
     var editorOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<Item?>(null) }
+    var confirmDeleteFolder by remember { mutableStateOf<Folder?>(null) }
+    var foldersOpen by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
+    var folderFilter by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Tick de 1 s para os códigos TOTP ao vivo.
     var tick by remember { mutableLongStateOf(0L) }
@@ -123,13 +136,19 @@ fun VaultScreen(
         }
     }
 
-    // Busca + favoritos primeiro, depois nome.
-    val visibleItems = remember(vault.items, query) {
+    // Busca + pasta selecionada; favoritos primeiro, depois nome.
+    val visibleItems = remember(vault.items, query, folderFilter) {
         val q = query.trim().lowercase()
-        val filtered = if (q.isEmpty()) {
-            vault.items
-        } else {
-            vault.items.filter { item ->
+        val filtered = vault.items.filter { item ->
+            val inFolder = when (folderFilter) {
+                null -> true
+                "" -> item.folderId == null
+                else -> item.folderId == folderFilter
+            }
+            if (!inFolder) return@filter false
+            if (q.isEmpty()) {
+                true
+            } else {
                 item.name.lowercase().contains(q) ||
                     item.login?.username?.lowercase()?.contains(q) == true ||
                     item.notes.lowercase().contains(q)
@@ -177,6 +196,35 @@ fun VaultScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             )
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FilterChip(
+                    selected = folderFilter == null,
+                    onClick = { folderFilter = null },
+                    label = { Text(stringResource(R.string.folder_filter_all)) },
+                )
+                FilterChip(
+                    selected = folderFilter == "",
+                    onClick = { folderFilter = "" },
+                    label = { Text(stringResource(R.string.folder_sem)) },
+                )
+                vault.folders.forEach { folder ->
+                    FilterChip(
+                        selected = folderFilter == folder.id,
+                        onClick = { folderFilter = folder.id },
+                        label = { Text(folder.name) },
+                    )
+                }
+                IconButton(onClick = { foldersOpen = true }, enabled = !busy) {
+                    Icon(
+                        Icons.Filled.CreateNewFolder,
+                        contentDescription = stringResource(R.string.folder_manage),
+                    )
+                }
+            }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
@@ -237,6 +285,7 @@ fun VaultScreen(
     if (editorOpen) {
         ItemEditorDialog(
             initial = editing,
+            folders = vault.folders,
             busy = busy,
             onSave = { item ->
                 onSaveItem(item)
@@ -246,6 +295,44 @@ fun VaultScreen(
             onDismiss = {
                 editorOpen = false
                 editing = null
+            },
+        )
+    }
+
+    if (foldersOpen) {
+        FolderManagerDialog(
+            folders = vault.folders,
+            busy = busy,
+            onAdd = onAddFolder,
+            onRename = onRenameFolder,
+            onDelete = { folder ->
+                confirmDeleteFolder = folder
+            },
+            onDismiss = { foldersOpen = false },
+        )
+    }
+
+    confirmDeleteFolder?.let { folder ->
+        AlertDialog(
+            onDismissRequest = { confirmDeleteFolder = null },
+            title = { Text(stringResource(R.string.folder_delete)) },
+            text = { Text(stringResource(R.string.folder_delete_message, folder.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteFolder(folder.id)
+                        confirmDeleteFolder = null
+                        if (folderFilter == folder.id) folderFilter = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.folder_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteFolder = null }) {
+                    Text(stringResource(R.string.editor_cancel))
+                }
             },
         )
     }
@@ -283,6 +370,7 @@ fun VaultScreen(
             onDismiss = onDismissImport,
         )
     }
+
 }
 
 /**
@@ -547,6 +635,9 @@ private fun ItemDetailDialog(
                 item.notes.takeIf { it.isNotBlank() && item.kind != ItemKind.NOTE }?.let { notes ->
                     FieldRow(stringResource(R.string.field_notes), notes, notes, onCopy)
                 }
+                item.customFields?.forEach { field ->
+                    FieldRow(field.name, field.value, field.value, onCopy)
+                }
             }
         },
         confirmButton = {
@@ -593,4 +684,121 @@ private fun FieldRow(label: String, value: String, copyable: String, onCopy: (St
         }
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
     }
+}
+
+/** Gerencia pastas: cria, renomeia e exclui. A exclusão pede confirmação no pai. */
+@Composable
+private fun FolderManagerDialog(
+    folders: List<Folder>,
+    busy: Boolean,
+    onAdd: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onDelete: (Folder) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var newName by remember { mutableStateOf("") }
+    var renaming by remember { mutableStateOf<Folder?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.folders_title)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text(stringResource(R.string.folder_name_label)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            onAdd(newName)
+                            newName = ""
+                        },
+                        enabled = newName.isNotBlank() && !busy,
+                    ) {
+                        Text(stringResource(R.string.folder_add))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                if (folders.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.folder_none),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    folders.forEach { folder ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = folder.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = { renaming = folder }, enabled = !busy) {
+                                Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.folder_rename))
+                            }
+                            IconButton(onClick = { onDelete(folder) }, enabled = !busy) {
+                                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.folder_delete))
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.dialog_close))
+            }
+        },
+    )
+
+    renaming?.let { folder ->
+        RenameFolderDialog(
+            folder = folder,
+            onConfirm = { name ->
+                onRename(folder.id, name)
+                renaming = null
+            },
+            onDismiss = { renaming = null },
+        )
+    }
+}
+
+@Composable
+private fun RenameFolderDialog(
+    folder: Folder,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf(folder.name) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.folder_rename)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.folder_name_label)) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+                Text(stringResource(R.string.editor_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.editor_cancel))
+            }
+        },
+    )
 }

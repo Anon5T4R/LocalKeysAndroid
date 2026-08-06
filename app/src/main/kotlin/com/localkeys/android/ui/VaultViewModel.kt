@@ -21,6 +21,7 @@ import com.localkeys.android.data.import.ImportFormat
 import com.localkeys.android.data.import.Importers
 import com.localkeys.android.data.store.SettingsStore
 import com.localkeys.android.data.vault.AutofillSaveBridge
+import com.localkeys.android.data.vault.Folder
 import com.localkeys.android.data.vault.Item
 import com.localkeys.android.data.vault.ItemKind
 import com.localkeys.android.data.vault.Login
@@ -421,6 +422,50 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 persistAndCommit(updated, notice = null)
             } catch (e: Exception) {
                 _state.update { it.copy(error = "Falha ao atualizar o favorito: ${e.message}", busy = false) }
+            }
+        }
+    }
+
+    // ── Pastas ───────────────────────────────────────────────────────────
+    /** Cria uma pasta nova e grava no arquivo. */
+    fun addFolder(name: String) {
+        if (_state.value.vaultUri == null) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _state.update { it.copy(busy = true, error = null) }
+            try {
+                val folder = Folder(UUID.randomUUID().toString(), name.trim())
+                val updated = repository.addFolder(folder)
+                persistAndCommit(updated, notice = "Pasta criada.")
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Falha ao criar a pasta: ${e.message}", busy = false) }
+            }
+        }
+    }
+
+    /** Renomeia uma pasta e grava no arquivo. */
+    fun renameFolder(id: String, name: String) {
+        if (_state.value.vaultUri == null) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _state.update { it.copy(busy = true, error = null) }
+            try {
+                val updated = repository.renameFolder(id, name.trim())
+                persistAndCommit(updated, notice = "Pasta renomeada.")
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Falha ao renomear a pasta: ${e.message}", busy = false) }
+            }
+        }
+    }
+
+    /** Exclui uma pasta (os itens ficam sem pasta) e grava no arquivo. */
+    fun deleteFolder(id: String) {
+        if (_state.value.vaultUri == null) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _state.update { it.copy(busy = true, error = null) }
+            try {
+                val updated = repository.deleteFolder(id)
+                persistAndCommit(updated, notice = "Pasta excluída.")
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Falha ao excluir a pasta: ${e.message}", busy = false) }
             }
         }
     }

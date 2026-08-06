@@ -1,5 +1,6 @@
 package com.localkeys.android.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,10 +9,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -29,7 +35,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.localkeys.android.R
+import com.localkeys.android.data.generator.PasswordGenerator
 import com.localkeys.android.data.vault.Card
+import com.localkeys.android.data.vault.CustomField
+import com.localkeys.android.data.vault.Folder
 import com.localkeys.android.data.vault.Identity
 import com.localkeys.android.data.vault.Item
 import com.localkeys.android.data.vault.ItemKind
@@ -44,6 +53,7 @@ import java.util.UUID
 @Composable
 fun ItemEditorDialog(
     initial: Item?,
+    folders: List<Folder>,
     busy: Boolean,
     onSave: (Item) -> Unit,
     onDismiss: () -> Unit,
@@ -52,6 +62,7 @@ fun ItemEditorDialog(
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
     var favorite by remember { mutableStateOf(initial?.favorite ?: false) }
+    var folderId by remember { mutableStateOf(initial?.folderId) }
     var showPassword by remember { mutableStateOf(false) }
 
     var username by remember { mutableStateOf(initial?.login?.username ?: "") }
@@ -71,6 +82,22 @@ fun ItemEditorDialog(
     var phone by remember { mutableStateOf(initial?.identity?.phone ?: "") }
     var address by remember { mutableStateOf(initial?.identity?.address ?: "") }
 
+    var customFields by remember {
+        mutableStateOf(initial?.customFields?.toMutableList() ?: mutableListOf())
+    }
+
+    fun addField() {
+        customFields = (customFields + CustomField(UUID.randomUUID().toString(), "", "", false)).toMutableList()
+    }
+
+    fun updateField(index: Int, transform: (CustomField) -> CustomField) {
+        customFields = customFields.toMutableList().apply { set(index, transform(get(index))) }
+    }
+
+    fun removeField(index: Int) {
+        customFields = customFields.toMutableList().apply { removeAt(index) }
+    }
+
     val canSave = name.isNotBlank() && !busy
 
     fun buildItem(): Item {
@@ -81,7 +108,7 @@ fun ItemEditorDialog(
             kind = kind,
             name = name.trim(),
             favorite = favorite,
-            folderId = initial?.folderId,
+            folderId = folderId,
             notes = notes.trim(),
             createdAt = initial?.createdAt ?: now,
             updatedAt = now,
@@ -119,7 +146,7 @@ fun ItemEditorDialog(
                 initial?.identity
             },
             passwordHistory = initial?.passwordHistory,
-            customFields = initial?.customFields,
+            customFields = customFields.takeIf { it.isNotEmpty() },
             attachments = initial?.attachments,
         )
     }
@@ -158,6 +185,30 @@ fun ItemEditorDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
+                Text(
+                    text = stringResource(R.string.field_folder),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = folderId == null,
+                        onClick = { folderId = null },
+                        label = { Text(stringResource(R.string.folder_sem)) },
+                    )
+                    folders.forEach { folder ->
+                        FilterChip(
+                            selected = folderId == folder.id,
+                            onClick = { folderId = folder.id },
+                            label = { Text(folder.name) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+
                 when (kind) {
                     ItemKind.LOGIN -> {
                         OutlinedTextField(
@@ -174,13 +225,24 @@ fun ItemEditorDialog(
                             singleLine = true,
                             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
-                                TextButton(onClick = { showPassword = !showPassword }) {
-                                    Text(
-                                        stringResource(
-                                            if (showPassword) R.string.unlock_hide
-                                            else R.string.unlock_show
-                                        ),
-                                    )
+                                Row {
+                                    IconButton(onClick = {
+                                        password = PasswordGenerator.generate()
+                                        showPassword = true
+                                    }) {
+                                        Icon(
+                                            Icons.Filled.AutoFixHigh,
+                                            contentDescription = stringResource(R.string.editor_generate),
+                                        )
+                                    }
+                                    TextButton(onClick = { showPassword = !showPassword }) {
+                                        Text(
+                                            stringResource(
+                                                if (showPassword) R.string.unlock_hide
+                                                else R.string.unlock_show
+                                            ),
+                                        )
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -282,6 +344,58 @@ fun ItemEditorDialog(
                     label = { Text(stringResource(R.string.field_notes)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                Text(
+                    text = stringResource(R.string.custom_fields),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                customFields.forEachIndexed { index, field ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = field.name,
+                                onValueChange = { value -> updateField(index) { it.copy(name = value) } },
+                                label = { Text(stringResource(R.string.custom_field_name)) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            OutlinedTextField(
+                                value = field.value,
+                                onValueChange = { value -> updateField(index) { it.copy(value = value) } },
+                                label = { Text(stringResource(R.string.custom_field_value)) },
+                                singleLine = true,
+                                visualTransformation = if (field.hidden) PasswordVisualTransformation() else VisualTransformation.None,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = field.hidden,
+                                    onCheckedChange = { checked -> updateField(index) { it.copy(hidden = checked) } },
+                                )
+                                Text(
+                                    text = stringResource(R.string.custom_field_hidden),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                            IconButton(onClick = { removeField(index) }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(R.string.custom_field_remove),
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                    }
+                }
+                TextButton(onClick = { addField() }, enabled = !busy) {
+                    Text(stringResource(R.string.custom_field_add))
+                }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = favorite, onCheckedChange = { favorite = it })

@@ -71,6 +71,27 @@
     <string name="field_address">Endereço</string>
     <string name="field_notes">Notas</string>
     <string name="field_totp">Chave TOTP</string>
+    <string name="field_folder">Pasta</string>
+
+    <!-- Campos personalizados -->
+    <string name="custom_fields">Campos personalizados</string>
+    <string name="custom_field_name">Nome</string>
+    <string name="custom_field_value">Valor</string>
+    <string name="custom_field_hidden">Oculto</string>
+    <string name="custom_field_add">Adicionar campo</string>
+    <string name="custom_field_remove">Remover campo</string>
+
+    <!-- Pastas -->
+    <string name="folders_title">Pastas</string>
+    <string name="folder_manage">Gerenciar pastas</string>
+    <string name="folder_filter_all">Todos</string>
+    <string name="folder_sem">Sem pasta</string>
+    <string name="folder_none">Nenhuma pasta ainda. Crie a primeira acima.</string>
+    <string name="folder_name_label">Nome da pasta</string>
+    <string name="folder_add">Adicionar</string>
+    <string name="folder_rename">Renomear pasta</string>
+    <string name="folder_delete">Excluir pasta</string>
+    <string name="folder_delete_message">Excluir a pasta "%1$s"? Os itens dela não são excluídos — ficam sem pasta.</string>
 
     <!-- Editor de item -->
     <string name="editor_new_title">Novo item</string>
@@ -80,6 +101,7 @@
     <string name="editor_save">Salvar</string>
     <string name="editor_cancel">Cancelar</string>
     <string name="editor_favorite">Favorito</string>
+    <string name="editor_generate">Gerar senha</string>
     <string name="kind_login">Login</string>
     <string name="kind_note">Nota</string>
     <string name="kind_card">Cartão</string>

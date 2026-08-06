@@ -105,6 +105,33 @@ class VaultRepository(private val crypto: TkeysCrypto) {
         return updated
     }
 
+    /** Adiciona uma pasta nova ao vault (em memória). */
+    fun addFolder(folder: Folder): Vault {
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val updated = v.copy(folders = v.folders + folder)
+        current = updated
+        return updated
+    }
+
+    /** Renomeia uma pasta. */
+    fun renameFolder(id: String, name: String): Vault {
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val updated = v.copy(folders = v.folders.map { if (it.id == id) it.copy(name = name) else it })
+        current = updated
+        return updated
+    }
+
+    /** Exclui uma pasta e desvincula os itens dela (os itens ficam sem pasta). */
+    fun deleteFolder(id: String): Vault {
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val updated = v.copy(
+            folders = v.folders.filterNot { it.id == id },
+            items = v.items.map { if (it.folderId == id) it.copy(folderId = null) else it },
+        )
+        current = updated
+        return updated
+    }
+
     /** Descarta a sessão e o plaintext (travar o cofre). */
     fun lock() {
         session = null

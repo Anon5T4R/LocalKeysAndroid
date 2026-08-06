@@ -246,4 +246,49 @@ class VaultRepositoryTest {
         assertThrows(IllegalStateException::class.java) { repository.deleteItem("x") }
         assertThrows(IllegalStateException::class.java) { repository.toggleFavorite("x") }
     }
+
+    // ── Pastas ────────────────────────────────────────────────────────────
+
+    @Test
+    fun add_folder_entra_no_vault_e_persiste_no_arquivo() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val updated = repository.addFolder(Folder("f1", "Trabalho"))
+        assertEquals(2, updated.folders.size)
+        assertEquals("Trabalho", repository.vault.folders.first { it.id == "f1" }.name)
+
+        val saved = repository.save()
+        val reopened = Vault.parse(String(crypto.openVault(TkeysCryptoTest.FIXTURE_PASSWORD, saved).plaintext))
+        assertEquals(2, reopened.folders.size)
+        assertTrue(reopened.folders.any { it.id == "f1" && it.name == "Trabalho" })
+    }
+
+    @Test
+    fun rename_folder_muda_o_nome_pelo_id() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val original = repository.vault.folders.first()
+        val updated = repository.renameFolder(original.id, "Pessoal")
+        assertEquals(1, updated.folders.size)
+        assertEquals("Pessoal", repository.vault.folders.first().name)
+    }
+
+    @Test
+    fun delete_folder_remove_e_desvincula_os_itens() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val folder = repository.vault.folders.first()
+        val comPasta = repository.addItem(login("em-pasta", "No folder").copy(folderId = folder.id))
+        assertTrue(comPasta.items.first { it.id == "em-pasta" }.folderId == folder.id)
+
+        val updated = repository.deleteFolder(folder.id)
+        assertEquals(0, updated.folders.size)
+        // O item continua no vault, mas sem pasta.
+        val item = updated.items.first { it.id == "em-pasta" }
+        assertNull(item.folderId)
+    }
+
+    @Test
+    fun folder_crud_lança_se_trancado() {
+        assertThrows(IllegalStateException::class.java) { repository.addFolder(Folder("x", "X")) }
+        assertThrows(IllegalStateException::class.java) { repository.renameFolder("x", "Y") }
+        assertThrows(IllegalStateException::class.java) { repository.deleteFolder("x") }
+    }
 }

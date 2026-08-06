@@ -51,6 +51,9 @@ fun LocalKeysApp(
             onSaveItem = viewModel::saveItem,
             onDeleteItem = viewModel::deleteItem,
             onToggleFavorite = viewModel::toggleFavorite,
+            onAddFolder = viewModel::addFolder,
+            onRenameFolder = viewModel::renameFolder,
+            onDeleteFolder = viewModel::deleteFolder,
             onNoticeShown = viewModel::consumeNotice,
             modifier = modifier,
         )
