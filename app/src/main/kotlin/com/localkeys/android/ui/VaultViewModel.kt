@@ -488,6 +488,8 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                         uris = request.uris,
                         totp = "",
                     ),
+                    card = null,
+                    identity = null,
                     passwordHistory = null,
                     customFields = null,
                     attachments = null,
