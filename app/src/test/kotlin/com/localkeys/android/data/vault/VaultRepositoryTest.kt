@@ -215,6 +215,69 @@ class VaultRepositoryTest {
         assertEquals(2, repository.vault.items.size)
     }
 
+    // ── Histórico de senhas ──────────────────────────────────────────────
+
+    @Test
+    fun update_item_grava_a_senha_anterior_quando_a_senha_muda() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val gmail = repository.vault.items.first { it.name == "gmail" }
+        val edited = gmail.copy(login = gmail.login?.copy(password = "nova-senha"))
+        val updated = repository.updateItem(edited)
+
+        val hist = updated.items.first { it.id == gmail.id }.passwordHistory
+        assertEquals(1, hist?.size)
+        assertEquals("hunter2", hist?.first()?.password)
+        assertTrue((hist?.first()?.at ?: 0) > 0)
+    }
+
+    @Test
+    fun update_item_sem_mudanca_de_senha_nao_grava_historico() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val gmail = repository.vault.items.first { it.name == "gmail" }
+        val edited = gmail.copy(login = gmail.login?.copy(username = "novo@email.com"))
+        val updated = repository.updateItem(edited)
+
+        val hist = updated.items.first { it.id == gmail.id }.passwordHistory
+        assertTrue(hist.isNullOrEmpty())
+    }
+
+    @Test
+    fun historico_nao_registra_quando_a_senha_anterior_era_vazia() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val semSenha = repository.addItem(login("s1", "Sem senha"))
+        val item = semSenha.items.first { it.id == "s1" }
+        val edited = item.copy(login = item.login?.copy(password = "nova"))
+        val updated = repository.updateItem(edited)
+
+        val hist = updated.items.first { it.id == "s1" }.passwordHistory
+        assertTrue(hist.isNullOrEmpty())
+    }
+
+    @Test
+    fun historico_entradas_mais_recentes_primeiro_com_cap_de_20() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val gmail = repository.vault.items.first { it.name == "gmail" }
+
+        // 19 entradas antigas (mais antiga = "antiga-1").
+        val comHistorico = gmail.copy(
+            passwordHistory = (1..19).map { PasswordHistoryEntry("antiga-$it", it.toLong()) },
+        )
+        // Troca 1 → 20 entradas, a mais recente "hunter2".
+        val aposPrimeira = repository.updateItem(
+            comHistorico.copy(login = comHistorico.login?.copy(password = "v20")),
+        ).items.first { it.id == gmail.id }
+        assertEquals(20, aposPrimeira.passwordHistory?.size)
+        assertEquals("hunter2", aposPrimeira.passwordHistory?.first()?.password)
+
+        // Troca 2 → estoura o cap; cai a mais velha ("antiga-1").
+        val aposSegunda = repository.updateItem(
+            aposPrimeira.copy(login = aposPrimeira.login?.copy(password = "v21")),
+        ).items.first { it.id == gmail.id }
+        assertEquals(20, aposSegunda.passwordHistory?.size)
+        assertEquals("v20", aposSegunda.passwordHistory?.first()?.password)
+        assertTrue(aposSegunda.passwordHistory?.none { it.password == "antiga-1" } == true)
+    }
+
     @Test
     fun delete_item_remove_do_vault_e_do_arquivo() {
         repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)

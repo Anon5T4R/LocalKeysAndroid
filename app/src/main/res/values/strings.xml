@@ -90,6 +90,19 @@
     <string name="custom_field_add">Adicionar campo</string>
     <string name="custom_field_remove">Remover campo</string>
 
+    <!-- Anexos -->
+    <string name="attach_title">Anexos</string>
+    <string name="attach_add">Adicionar anexo</string>
+    <string name="attach_remove">Remover anexo</string>
+    <string name="attach_save">Salvar</string>
+    <string name="attach_size_kb">%1$d KB</string>
+    <string name="attach_too_large">Anexo grande demais (máx. 1 MB)</string>
+    <string name="attach_read_failed">Não foi possível ler o anexo.</string>
+    <string name="attach_save_failed">Não foi possível salvar o anexo.</string>
+
+    <!-- Histórico de senhas -->
+    <string name="history_title">Histórico de senhas (%1$d)</string>
+
     <!-- Pastas -->
     <string name="folders_title">Pastas</string>
     <string name="folder_manage">Gerenciar pastas</string>

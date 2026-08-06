@@ -62,6 +62,45 @@ class VaultTest {
     }
 
     @Test
+    fun roundtrip_com_anexos_e_historico_de_senhas() {
+        val item = Vault.parse(SAMPLE_JSON).items[0].copy(
+            attachments = listOf(Attachment("a1", "doc.pdf", 4, "application/pdf", "AQID")),
+            passwordHistory = listOf(
+                PasswordHistoryEntry("antiga", 1710000000000),
+                PasswordHistoryEntry("mais-antiga", 1710000000001),
+            ),
+        )
+        val out = Vault(1, emptyList(), listOf(item)).toJson()
+        val back = Vault.parse(out).items[0]
+
+        assertEquals(1, back.attachments?.size)
+        assertEquals("a1", back.attachments?.first()?.id)
+        assertEquals("doc.pdf", back.attachments?.first()?.name)
+        assertEquals(4L, back.attachments?.first()?.size)
+        assertEquals("application/pdf", back.attachments?.first()?.mime)
+        assertEquals("AQID", back.attachments?.first()?.dataB64)
+
+        assertEquals(2, back.passwordHistory?.size)
+        assertEquals("antiga", back.passwordHistory?.first()?.password)
+        assertEquals(1710000000000, back.passwordHistory?.first()?.at)
+
+        assertTrue(JSONObject(out).similar(JSONObject(back.toJson())))
+    }
+
+    @Test
+    fun campos_opcionais_ausentes_ficam_null_e_omitidos_no_json() {
+        val item = Vault.parse(SAMPLE_JSON).items[0].copy(
+            passwordHistory = null,
+            customFields = null,
+            attachments = null,
+        )
+        val json = item.toJson()
+        assertFalse(json.has("passwordHistory"))
+        assertFalse(json.has("customFields"))
+        assertFalse(json.has("attachments"))
+    }
+
+    @Test
     fun empty_vault() {
         val empty = Vault.empty()
         assertEquals(1, empty.version)

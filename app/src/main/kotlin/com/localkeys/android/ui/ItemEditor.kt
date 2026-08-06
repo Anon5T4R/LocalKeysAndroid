@@ -1,5 +1,10 @@
 package com.localkeys.android.ui
 
+import android.provider.OpenableColumns
+import android.util.Base64
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,9 +31,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -36,6 +43,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.localkeys.android.R
 import com.localkeys.android.data.generator.PasswordGenerator
+import com.localkeys.android.data.vault.Attachment
 import com.localkeys.android.data.vault.Card
 import com.localkeys.android.data.vault.CustomField
 import com.localkeys.android.data.vault.Folder
@@ -43,6 +51,10 @@ import com.localkeys.android.data.vault.Identity
 import com.localkeys.android.data.vault.Item
 import com.localkeys.android.data.vault.ItemKind
 import com.localkeys.android.data.vault.Login
+import com.localkeys.android.data.vault.MAX_ATTACHMENT_BYTES
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
@@ -84,6 +96,51 @@ fun ItemEditorDialog(
 
     var customFields by remember {
         mutableStateOf(initial?.customFields?.toMutableList() ?: mutableListOf<CustomField>())
+    }
+
+    var attachments by remember {
+        mutableStateOf(initial?.attachments?.toMutableList() ?: mutableListOf<Attachment>())
+    }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val (name, bytes) = withContext(Dispatchers.IO) {
+                val resolver = context.contentResolver
+                val displayName = resolver.query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                    ?: "anexo"
+                val data = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: return@withContext (displayName to ByteArray(0))
+                displayName to data
+            }
+            if (bytes.isEmpty()) {
+                Toast.makeText(context, R.string.attach_read_failed, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (bytes.size > MAX_ATTACHMENT_BYTES) {
+                Toast.makeText(context, R.string.attach_too_large, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            attachments = (attachments + Attachment(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                size = bytes.size.toLong(),
+                mime = "",
+                dataB64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+            )).toMutableList()
+        }
+    }
+
+    fun removeAttachment(id: String) {
+        attachments = attachments.filterNot { it.id == id }.toMutableList()
     }
 
     fun addField() {
@@ -147,7 +204,7 @@ fun ItemEditorDialog(
             },
             passwordHistory = initial?.passwordHistory,
             customFields = customFields.takeIf { it.isNotEmpty() },
-            attachments = initial?.attachments,
+            attachments = attachments.takeIf { it.isNotEmpty() },
         )
     }
 
@@ -395,6 +452,40 @@ fun ItemEditorDialog(
                 }
                 TextButton(onClick = { addField() }, enabled = !busy) {
                     Text(stringResource(R.string.custom_field_add))
+                }
+
+                Text(
+                    text = stringResource(R.string.attach_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                attachments.forEach { att ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = att.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.attach_size_kb, (att.size / 1024).coerceAtLeast(1)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = { removeAttachment(att.id) }, enabled = !busy) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = stringResource(R.string.attach_remove),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
+                TextButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !busy) {
+                    Text(stringResource(R.string.attach_add))
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {

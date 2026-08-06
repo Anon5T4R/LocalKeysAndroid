@@ -251,6 +251,9 @@ data class CustomField(
     }
 }
 
+/** Limite por anexo — o blob inteiro é recifrado a cada save, então nada de arquivos grandes. */
+const val MAX_ATTACHMENT_BYTES = 1024 * 1024 // 1 MiB
+
 data class Attachment(
     val id: String,
     val name: String,

@@ -1,5 +1,8 @@
 package com.localkeys.android.ui
 
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -69,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import com.localkeys.android.R
 import com.localkeys.android.data.totp.Totp
 import com.localkeys.android.data.totp.TotpCode
+import com.localkeys.android.data.vault.Attachment
 import com.localkeys.android.data.vault.Folder
 import com.localkeys.android.data.vault.Item
 import com.localkeys.android.data.vault.ItemKind
@@ -648,6 +652,21 @@ private fun ItemDetailDialog(
     onToggleFavorite: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var pendingSave by remember { mutableStateOf<Attachment?>(null) }
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
+        val att = pendingSave ?: return@rememberLauncherForActivityResult
+        pendingSave = null
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use {
+                    it.write(Base64.decode(att.dataB64, Base64.NO_WRAP))
+                }
+            }.onFailure {
+                android.widget.Toast.makeText(context, R.string.attach_save_failed, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -698,6 +717,46 @@ private fun ItemDetailDialog(
                 item.customFields?.forEach { field ->
                     FieldRow(field.name, field.value, field.value, onCopy)
                 }
+                item.attachments?.takeIf { it.isNotEmpty() }?.let { atts ->
+                    Text(
+                        text = stringResource(R.string.attach_title),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    atts.forEach { att ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = att.name, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    text = stringResource(R.string.attach_size_kb, (att.size / 1024).coerceAtLeast(1)),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(onClick = {
+                                pendingSave = att
+                                saver.launch(att.name)
+                            }) {
+                                Text(stringResource(R.string.attach_save))
+                            }
+                        }
+                    }
+                }
+                item.passwordHistory?.takeIf { it.isNotEmpty() }?.let { history ->
+                    Text(
+                        text = stringResource(R.string.history_title, history.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    history.forEach { entry ->
+                        FieldRow(formatDate(entry.at), entry.password, entry.password, onCopy)
+                    }
+                }
             }
         },
         confirmButton = {
@@ -745,6 +804,11 @@ private fun FieldRow(label: String, value: String, copyable: String, onCopy: (St
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
     }
 }
+
+/** Data legível no locale do aparelho (entradas do histórico de senhas). */
+private fun formatDate(epochMillis: Long): String =
+    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
+        .format(java.util.Date(epochMillis))
 
 /** Gerencia pastas: cria, renomeia e exclui. A exclusão pede confirmação no pai. */
 @Composable

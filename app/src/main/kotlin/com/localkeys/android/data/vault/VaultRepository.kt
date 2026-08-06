@@ -81,12 +81,29 @@ class VaultRepository(private val crypto: TkeysCrypto) {
         return updated
     }
 
-    /** Substitui um item existente (mesmo id) no vault atual. */
+    /**
+     * Substitui um item existente (mesmo id) no vault atual. Se a senha de um
+     * login mudou, guarda a anterior no histórico (mais recente primeiro,
+     * cap 20) — mesmo comportamento do `updateItem` do desktop.
+     */
     fun updateItem(item: Item): Vault {
         val v = current ?: throw IllegalStateException("vault não está destrancado")
-        val updated = v.copy(items = v.items.map { if (it.id == item.id) item else it })
-        current = updated
-        return updated
+        val prev = v.items.firstOrNull { it.id == item.id }
+        var updated = item
+        if (
+            item.kind == ItemKind.LOGIN &&
+            prev?.login != null &&
+            item.login != null &&
+            prev.login.password.isNotEmpty() &&
+            prev.login.password != item.login.password
+        ) {
+            val history = listOf(PasswordHistoryEntry(prev.login.password, System.currentTimeMillis())) +
+                (item.passwordHistory ?: emptyList())
+            updated = item.copy(passwordHistory = history.take(20))
+        }
+        val result = v.copy(items = v.items.map { if (it.id == item.id) updated else it })
+        current = result
+        return result
     }
 
     /** Remove um item pelo id. */
