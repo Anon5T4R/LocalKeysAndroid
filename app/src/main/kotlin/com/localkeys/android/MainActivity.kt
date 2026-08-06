@@ -1,5 +1,6 @@
 package com.localkeys.android
 
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -48,6 +49,10 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // API 33+: a notificação de feedback do autofill precisa de permissão.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 0)
+        }
         setContent {
             LocalKeysTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->

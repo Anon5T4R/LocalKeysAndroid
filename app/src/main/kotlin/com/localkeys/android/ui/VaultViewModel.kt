@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.goterl.lazysodium.LazySodiumAndroid
 import com.goterl.lazysodium.SodiumAndroid
 import com.localkeys.android.data.biometric.BiometricVaultKey
+import com.localkeys.android.data.autofill.AutofillMatcher
 import com.localkeys.android.data.crypto.Hex
 import com.localkeys.android.data.crypto.TkeysCrypto
 import com.localkeys.android.data.crypto.TkeysError
@@ -19,7 +20,10 @@ import com.localkeys.android.data.import.ImportError
 import com.localkeys.android.data.import.ImportFormat
 import com.localkeys.android.data.import.Importers
 import com.localkeys.android.data.store.SettingsStore
+import com.localkeys.android.data.vault.AutofillSaveBridge
 import com.localkeys.android.data.vault.Item
+import com.localkeys.android.data.vault.ItemKind
+import com.localkeys.android.data.vault.Login
 import com.localkeys.android.data.vault.Vault
 import com.localkeys.android.data.vault.VaultAutofillCache
 import com.localkeys.android.data.vault.VaultRepository
@@ -31,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.util.UUID
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 
@@ -436,7 +441,64 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Mantém o cache do autofill em sincronia com o estado do cofre. */
     private fun syncAutofillCache(vault: Vault?) {
-        if (vault == null) VaultAutofillCache.clear() else VaultAutofillCache.set(vault)
+        if (vault == null) {
+            VaultAutofillCache.clear()
+            AutofillSaveBridge.unregister()
+        } else {
+            VaultAutofillCache.set(vault)
+            AutofillSaveBridge.register(::persistAutofillLogin)
+        }
+    }
+
+    /**
+     * Credencial nova vinda de um SaveRequest do autofill: adiciona como item
+     * de login e recifra/grava. Sem duplicar quando já existe a mesma
+     * combinação usuário+senha+site.
+     */
+    private fun persistAutofillLogin(request: AutofillSaveBridge.LoginSaveRequest) {
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                val vault = repository.vault
+                val dupe = vault.items.any { item ->
+                    item.kind == ItemKind.LOGIN &&
+                        item.login?.username == request.username &&
+                        item.login?.password == request.password &&
+                        request.uris.isNotEmpty() &&
+                        item.login?.uris?.intersect(request.uris.toSet())?.isNotEmpty() == true
+                }
+                if (dupe) return@launch
+
+                val now = System.currentTimeMillis()
+                val domain = request.uris.firstNotNullOfOrNull { AutofillMatcher.normalizeDomain(it) }
+                val item = Item(
+                    id = UUID.randomUUID().toString(),
+                    kind = ItemKind.LOGIN,
+                    name = domain?.takeIf { it.isNotBlank() }
+                        ?: request.username.takeIf { it.isNotBlank() }
+                        ?: "Credencial do autofill",
+                    favorite = false,
+                    folderId = null,
+                    notes = "",
+                    createdAt = now,
+                    updatedAt = now,
+                    deletedAt = null,
+                    login = Login(
+                        username = request.username,
+                        password = request.password,
+                        uris = request.uris,
+                        totp = "",
+                    ),
+                    passwordHistory = null,
+                    customFields = null,
+                    attachments = null,
+                )
+                repository.addItem(item)
+                persistAndCommit(repository.vault, notice = null)
+            } catch (_: Exception) {
+                // Cofre trancou no meio do caminho ou falha de gravação: o
+                // autofill segue normal e o usuário salva manualmente depois.
+            }
+        }
     }
 
     // ── Travar / limpar ──────────────────────────────────────────────────

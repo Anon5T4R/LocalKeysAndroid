@@ -96,4 +96,6 @@
     <!-- Autofill -->
     <string name="autofill_service_label">Preenchimento do LocalKeys</string>
     <string name="autofill_unlock">Desbloquear o LocalKeys</string>
+    <string name="autofill_notify_channel">Autofill</string>
+    <string name="autofill_save_locked">Destrave o LocalKeys para salvar credenciais novas.</string>
 </resources>
