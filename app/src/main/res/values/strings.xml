@@ -28,6 +28,7 @@
     <string name="vault_save">Salvar</string>
     <string name="vault_lock">Travar</string>
     <string name="vault_import">Importar</string>
+    <string name="vault_export">Exportar</string>
     <string name="vault_add">Adicionar</string>
     <string name="vault_empty">Seu cofre está vazio. Toque em + para adicionar o primeiro item.</string>
     <string name="search_placeholder">Buscar…</string>
@@ -39,6 +40,12 @@
     <string name="import_password_label">Senha do Bitwarden</string>
     <string name="import_confirm">Importar</string>
     <string name="import_cancel">Cancelar</string>
+
+    <!-- Exportar -->
+    <string name="export_title">Exportar cofre</string>
+    <string name="export_warning">O arquivo sai SEM cifra, em texto claro. Use apenas para migrar de app — não para backup.</string>
+    <string name="export_json">JSON (LocalKeys)</string>
+    <string name="export_csv">CSV (planilha)</string>
 
     <!-- Biometria -->
     <string name="biometric_title">Desbloqueio biométrico</string>

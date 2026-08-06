@@ -46,6 +46,18 @@ class MainActivity : FragmentActivity() {
             if (uri != null) viewModel.onImportUriChosen(uri)
         }
 
+    private val exportLauncher: ActivityResultLauncher<String> =
+        registerForActivityResult(ActivityResultContracts.CreateDocument(null)) { uri ->
+            if (uri != null) viewModel.onExportUriChosen(uri)
+        }
+
+    /** "json" ou "csv": prepara o conteúdo e abre o SAF para escolher o destino. */
+    private fun startExport(format: String) {
+        val name = if (format == "csv") "localkeys-export.csv" else "localkeys-export.json"
+        viewModel.exportRequested(format)
+        exportLauncher.launch(name)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -68,6 +80,7 @@ class MainActivity : FragmentActivity() {
                         onPickImport = {
                             importLauncher.launch(arrayOf("*/*"))
                         },
+                        onExport = ::startExport,
                         onRequestBiometric = ::launchBiometric,
                         modifier = Modifier.padding(innerPadding),
                     )

@@ -19,6 +19,7 @@ import com.localkeys.android.data.import.BwDecrypt
 import com.localkeys.android.data.import.ImportError
 import com.localkeys.android.data.import.ImportFormat
 import com.localkeys.android.data.import.Importers
+import com.localkeys.android.data.export.VaultExporter
 import com.localkeys.android.data.store.SettingsStore
 import com.localkeys.android.data.vault.AutofillSaveBridge
 import com.localkeys.android.data.vault.Folder
@@ -83,6 +84,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     private var wrappedKeyHex: String? = null
     private var biometricOn: Boolean = false
     private var encryptedImport: String? = null
+    private var pendingExport: String? = null
 
     init {
         viewModelScope.launch {
@@ -544,6 +546,36 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             } catch (_: Exception) {
                 // Cofre trancou no meio do caminho ou falha de gravação: o
                 // autofill segue normal e o usuário salva manualmente depois.
+            }
+        }
+    }
+
+    // ── Exportar ─────────────────────────────────────────────────────────
+
+    /** "json" ou "csv": monta o conteúdo em claro e guarda até o SAF responder. */
+    fun exportRequested(format: String) {
+        try {
+            pendingExport = when (format) {
+                "csv" -> VaultExporter.toCsv(repository.vault)
+                else -> VaultExporter.toJson(repository.vault)
+            }
+        } catch (e: Exception) {
+            _state.update { it.copy(error = "Falha ao preparar o export: ${e.message}") }
+        }
+    }
+
+    /** Documento escolhido no SAF: grava o export em claro nele. */
+    fun onExportUriChosen(uri: Uri) {
+        val content = pendingExport ?: return
+        pendingExport = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val written = getApplication<Application>().contentResolver
+                    .openOutputStream(uri)?.use { it.write(content.toByteArray(Charsets.UTF_8)) } != null
+                if (!written) throw IOException("não foi possível gravar o export")
+                _state.update { it.copy(notice = "Export salvo. Sem cifra — use só para migrar.") }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Falha ao salvar o export: ${e.message}") }
             }
         }
     }

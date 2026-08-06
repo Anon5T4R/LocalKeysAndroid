@@ -27,6 +27,7 @@ fun LocalKeysApp(
     onPickDocument: () -> Unit,
     onCreateDocument: (String) -> Unit,
     onPickImport: () -> Unit,
+    onExport: (String) -> Unit,
     onRequestBiometric: (BiometricRequest) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -48,6 +49,7 @@ fun LocalKeysApp(
             onPickImport = onPickImport,
             onImportPassword = viewModel::onImportPassword,
             onDismissImport = viewModel::dismissImport,
+            onExport = onExport,
             onSaveItem = viewModel::saveItem,
             onDeleteItem = viewModel::deleteItem,
             onToggleFavorite = viewModel::toggleFavorite,

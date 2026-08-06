@@ -94,6 +94,7 @@ fun VaultScreen(
     onPickImport: () -> Unit,
     onImportPassword: (String) -> Unit,
     onDismissImport: () -> Unit,
+    onExport: (String) -> Unit,
     onSaveItem: (Item) -> Unit,
     onDeleteItem: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
@@ -119,6 +120,7 @@ fun VaultScreen(
     var foldersOpen by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var folderFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var exportOpen by rememberSaveable { mutableStateOf(false) }
 
     // Tick de 1 s para os códigos TOTP ao vivo.
     var tick by remember { mutableLongStateOf(0L) }
@@ -162,6 +164,9 @@ fun VaultScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
+                    TextButton(onClick = { exportOpen = true }, enabled = !busy) {
+                        Text(stringResource(R.string.vault_export))
+                    }
                     TextButton(onClick = onPickImport, enabled = !busy) {
                         Text(stringResource(R.string.vault_import))
                     }
@@ -371,6 +376,51 @@ fun VaultScreen(
         )
     }
 
+    if (exportOpen) {
+        ExportDialog(
+            onPick = { format ->
+                exportOpen = false
+                onExport(format)
+            },
+            onDismiss = { exportOpen = false },
+        )
+    }
+}
+
+/**
+ * Escolha de formato do export. O aviso é proposital: o arquivo sai EM CLARO
+ * (sem cifra) — serve para migrar de app, não para backup.
+ */
+@Composable
+private fun ExportDialog(
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.export_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.export_warning),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(16.dp))
+                TextButton(onClick = { onPick("json") }) {
+                    Text(stringResource(R.string.export_json))
+                }
+                TextButton(onClick = { onPick("csv") }) {
+                    Text(stringResource(R.string.export_csv))
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.editor_cancel))
+            }
+        },
+    )
 }
 
 /**
