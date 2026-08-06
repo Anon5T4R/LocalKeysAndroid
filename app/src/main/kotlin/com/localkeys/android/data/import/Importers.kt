@@ -55,4 +55,8 @@ object Importers {
         ImportFormat.BITWARDEN_JSON -> BitwardenImport.parse(text)
         else -> CsvImport.parse(text)
     }
+
+    /** Cofre KeePass (.kdbx): decifra com a senha-mestra e converte em itens. */
+    fun parseKdbx(bytes: ByteArray, password: String): List<Item> =
+        KdbxImport.parse(bytes, password)
 }

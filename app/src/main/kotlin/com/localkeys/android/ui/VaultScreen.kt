@@ -424,8 +424,8 @@ private fun ExportDialog(
 }
 
 /**
- * Export cifrado do Bitwarden: pede a senha do próprio Bitwarden (não a do
- * cofre) para decifrar antes de importar.
+ * Export cifrado (Bitwarden) ou cofre KeePass: pede a senha do arquivo (não a
+ * do cofre LocalKeys) para decifrar antes de importar.
  */
 @Composable
 private fun ImportDialog(
@@ -437,6 +437,7 @@ private fun ImportDialog(
 ) {
     var password by remember { mutableStateOf("") }
     var show by remember { mutableStateOf(false) }
+    val isKdbx = pending.source == VaultViewModel.ImportSource.KDBX
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.import_title)) },
@@ -449,14 +450,23 @@ private fun ImportDialog(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = stringResource(R.string.import_encrypted_hint),
+                    text = stringResource(
+                        if (isKdbx) R.string.import_kdbx_hint else R.string.import_encrypted_hint,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text(stringResource(R.string.import_password_label)) },
+                    label = {
+                        Text(
+                            stringResource(
+                                if (isKdbx) R.string.import_kdbx_password_label
+                                else R.string.import_password_label
+                            ),
+                        )
+                    },
                     singleLine = true,
                     visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {

@@ -16,7 +16,6 @@ import com.localkeys.android.data.crypto.TkeysCrypto
 import com.localkeys.android.data.crypto.TkeysError
 import com.localkeys.android.data.import.BitwardenImport
 import com.localkeys.android.data.import.BwDecrypt
-import com.localkeys.android.data.import.ImportError
 import com.localkeys.android.data.import.ImportFormat
 import com.localkeys.android.data.import.Importers
 import com.localkeys.android.data.export.VaultExporter
@@ -55,10 +54,14 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         data object Vault : Screen
     }
 
+    /** Origem do import pendente: muda a mensagem do diálogo de senha. */
+    enum class ImportSource { BITWARDEN, KDBX }
+
     /** Import em andamento: arquivo escolhido + se precisa da senha do export. */
     data class PendingImport(
         val fileName: String,
         val needsPassword: Boolean,
+        val source: ImportSource,
     )
 
     data class UiState(
@@ -84,6 +87,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     private var wrappedKeyHex: String? = null
     private var biometricOn: Boolean = false
     private var encryptedImport: String? = null
+    private var pendingKdbx: ByteArray? = null
     private var pendingExport: String? = null
 
     init {
@@ -292,20 +296,34 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                     null,
                     null,
                 )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
-                val content = resolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?.toString(Charsets.UTF_8) ?: throw IOException("arquivo não encontrado")
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IOException("arquivo não encontrado")
+                val content = bytes.toString(Charsets.UTF_8)
 
                 when (val format = Importers.detectFormat(fileName, content)) {
-                    ImportFormat.KDBX -> throw ImportError(
-                        "Import de KeePass (.kdbx) ainda não é suportado no Android. " +
-                            "Exporte o cofre em CSV ou JSON e importe de novo.",
-                    )
+                    ImportFormat.KDBX -> {
+                        pendingKdbx = bytes
+                        _state.update {
+                            it.copy(
+                                busy = false,
+                                pendingImport = PendingImport(
+                                    fileName ?: "cofre KeePass",
+                                    needsPassword = true,
+                                    source = ImportSource.KDBX,
+                                ),
+                            )
+                        }
+                    }
                     ImportFormat.BITWARDEN_ENCRYPTED -> {
                         encryptedImport = content
                         _state.update {
                             it.copy(
                                 busy = false,
-                                pendingImport = PendingImport(fileName ?: "export bitwarden", needsPassword = true),
+                                pendingImport = PendingImport(
+                                    fileName ?: "export bitwarden",
+                                    needsPassword = true,
+                                    source = ImportSource.BITWARDEN,
+                                ),
                             )
                         }
                     }
@@ -313,6 +331,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 encryptedImport = null
+                pendingKdbx = null
                 _state.update {
                     it.copy(busy = false, pendingImport = null, error = e.message ?: "Falha ao importar.")
                 }
@@ -320,9 +339,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Senha do export cifrado do Bitwarden: decifra, parseia e importa. */
+    /** Senha do export: decifra Bitwarden ou KeePass e importa. */
     fun onImportPassword(password: String) {
-        val json = encryptedImport ?: return
+        if (encryptedImport == null && pendingKdbx == null) return
         if (password.isBlank()) {
             _state.update { it.copy(error = "Digite a senha do export.") }
             return
@@ -330,8 +349,12 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.Default) {
             _state.update { it.copy(busy = true, error = null) }
             try {
-                val plain = BwDecrypt.decryptExport(json, password)
-                performImport(BitwardenImport.parse(plain), null)
+                val items = pendingKdbx?.let { Importers.parseKdbx(it, password) }
+                    ?: run {
+                        val json = encryptedImport ?: return@launch
+                        BitwardenImport.parse(BwDecrypt.decryptExport(json, password))
+                    }
+                performImport(items, null)
             } catch (e: Exception) {
                 // Senha errada: mantém o diálogo aberto para tentar de novo.
                 _state.update { it.copy(busy = false, error = e.message ?: "Falha ao importar.") }
@@ -342,6 +365,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     /** Cancela o import pendente. */
     fun dismissImport() {
         encryptedImport = null
+        pendingKdbx = null
         _state.update { it.copy(pendingImport = null) }
     }
 
@@ -368,6 +392,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (!written) throw IOException("não foi possível gravar o cofre")
             encryptedImport = null
+            pendingKdbx = null
             syncAutofillCache(merged)
             _state.update {
                 it.copy(
@@ -379,6 +404,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             }
         } catch (e: Exception) {
             encryptedImport = null
+            pendingKdbx = null
             _state.update {
                 it.copy(busy = false, pendingImport = null, error = "Falha ao importar: ${e.message}")
             }

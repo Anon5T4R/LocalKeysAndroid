@@ -37,7 +37,9 @@
     <string name="import_title">Importar de outro gerenciador</string>
     <string name="import_file">Arquivo: %1$s</string>
     <string name="import_encrypted_hint">Este export está cifrado. Digite a senha usada para exportá-lo.</string>
+    <string name="import_kdbx_hint">Este é um cofre KeePass. Digite a senha-mestra usada para criá-lo.</string>
     <string name="import_password_label">Senha do Bitwarden</string>
+    <string name="import_kdbx_password_label">Senha do KeePass</string>
     <string name="import_confirm">Importar</string>
     <string name="import_cancel">Cancelar</string>
 
