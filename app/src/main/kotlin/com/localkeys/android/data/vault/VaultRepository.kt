@@ -4,7 +4,6 @@ import com.localkeys.android.data.crypto.OpenedVault
 import com.localkeys.android.data.crypto.SessionKey
 import com.localkeys.android.data.crypto.TkeysCrypto
 import com.localkeys.android.data.crypto.TkeysError
-import org.json.JSONObject
 
 /**
  * Estado vivo do vault na memória — espelho do `AppState` do desktop (`lib.rs`):
@@ -81,15 +80,10 @@ class VaultRepository(private val crypto: TkeysCrypto) {
         } catch (e: TkeysError) {
             throw TkeysError.Corrupted
         }
-        val reparsed = try {
-            Vault.parse(String(plaintext))
-        } catch (e: Exception) {
-            throw TkeysError.Corrupted
-        }
-        val expected = JSONObject(v.toJson())
-        val got = JSONObject(reparsed.toJson())
-        if (!expected.similar(got)) throw TkeysError.Corrupted
-        return reparsed
+        // A decifração é autenticada: se o plaintext não for byte a byte o que o
+        // save() selou, o blob foi cifrado com outro conteúdo — nunca gravar.
+        if (!plaintext.contentEquals(v.toJson().toByteArray())) throw TkeysError.Corrupted
+        return v
     }
 
     /** Cópia da chave derivada (32 bytes) para o cofre biométrico. */

@@ -363,9 +363,9 @@ class VaultRepositoryTest {
         repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
         val withItem = repository.addItem(login("v1", "verificado"))
         val blob = repository.save()
-        val reparsed = repository.verifySaved(blob)
-        assertEquals(withItem.items.size, reparsed.items.size)
-        assertEquals("verificado", reparsed.items.first { it.id == "v1" }.name)
+        val verified = repository.verifySaved(blob)
+        assertEquals(withItem.items.size, verified.items.size)
+        assertEquals("verificado", verified.items.first { it.id == "v1" }.name)
         assertTrue(repository.isUnlocked)
     }
 

@@ -518,7 +518,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
      * não reabre — o estado do chamador nunca é comitado nesse caso.
      */
     private suspend fun writeAndVerify(resolver: ContentResolver, document: Uri, file: ByteArray) {
-        fun writeOnce(): Boolean = withContext(Dispatchers.IO) {
+        suspend fun writeOnce(): Boolean = withContext(Dispatchers.IO) {
             resolver.openOutputStream(document)?.use { it.write(file) } != null
         }
         if (!writeOnce()) throw IOException("não foi possível gravar o cofre")
