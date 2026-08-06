@@ -232,20 +232,23 @@ object KdbxImport {
         if (data.size < 2) throw ImportError("VariantDictionary corrompido")
         if (readU16LE(data, 0) != 0x0100) throw ImportError("versão de VariantDictionary não suportada")
         var pos = 2
-        while (pos + 9 <= data.size) {
+        while (pos < data.size) {
             val type = data[pos].toInt() and 0xFF
             pos += 1
             if (type == 0) return out // END
+            if (pos + 8 > data.size) throw ImportError("VariantDictionary corrompido")
             val keyLen = readU32LE(data, pos)
             pos += 4
+            if (pos + keyLen + 4 > data.size) throw ImportError("VariantDictionary corrompido")
             val key = String(data, pos, keyLen, Charsets.UTF_8)
             pos += keyLen
             val valLen = readU32LE(data, pos)
             pos += 4
+            if (pos + valLen > data.size) throw ImportError("VariantDictionary corrompido")
             out[key] = data.copyOfRange(pos, pos + valLen)
             pos += valLen
         }
-        throw ImportError("VariantDictionary não terminado")
+        return out
     }
 
     // ── HMAC block stream ──────────────────────────────────────────────
