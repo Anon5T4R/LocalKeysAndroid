@@ -269,13 +269,14 @@ class VaultRepositoryTest {
         assertEquals(20, aposPrimeira.passwordHistory?.size)
         assertEquals("hunter2", aposPrimeira.passwordHistory?.first()?.password)
 
-        // Troca 2 → estoura o cap; cai a mais velha ("antiga-1").
+        // Troca 2 → estoura o cap; cai a mais velha (antiga-19).
         val aposSegunda = repository.updateItem(
             aposPrimeira.copy(login = aposPrimeira.login?.copy(password = "v21")),
         ).items.first { it.id == gmail.id }
         assertEquals(20, aposSegunda.passwordHistory?.size)
         assertEquals("v20", aposSegunda.passwordHistory?.first()?.password)
-        assertTrue(aposSegunda.passwordHistory?.none { it.password == "antiga-1" } == true)
+        assertTrue(aposSegunda.passwordHistory?.none { it.password == "antiga-19" } == true)
+        assertTrue(aposSegunda.passwordHistory?.any { it.password == "antiga-1" } == true)
     }
 
     @Test

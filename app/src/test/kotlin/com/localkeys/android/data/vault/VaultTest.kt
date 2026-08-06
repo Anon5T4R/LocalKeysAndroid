@@ -71,18 +71,18 @@ class VaultTest {
             ),
         )
         val out = Vault(1, emptyList(), listOf(item)).toJson()
-        val back = Vault.parse(out).items[0]
+        val back = Vault.parse(out)
 
-        assertEquals(1, back.attachments?.size)
-        assertEquals("a1", back.attachments?.first()?.id)
-        assertEquals("doc.pdf", back.attachments?.first()?.name)
-        assertEquals(4L, back.attachments?.first()?.size)
-        assertEquals("application/pdf", back.attachments?.first()?.mime)
-        assertEquals("AQID", back.attachments?.first()?.dataB64)
+        assertEquals(1, back.items[0].attachments?.size)
+        assertEquals("a1", back.items[0].attachments?.first()?.id)
+        assertEquals("doc.pdf", back.items[0].attachments?.first()?.name)
+        assertEquals(4L, back.items[0].attachments?.first()?.size)
+        assertEquals("application/pdf", back.items[0].attachments?.first()?.mime)
+        assertEquals("AQID", back.items[0].attachments?.first()?.dataB64)
 
-        assertEquals(2, back.passwordHistory?.size)
-        assertEquals("antiga", back.passwordHistory?.first()?.password)
-        assertEquals(1710000000000, back.passwordHistory?.first()?.at)
+        assertEquals(2, back.items[0].passwordHistory?.size)
+        assertEquals("antiga", back.items[0].passwordHistory?.first()?.password)
+        assertEquals(1710000000000, back.items[0].passwordHistory?.first()?.at)
 
         assertTrue(JSONObject(out).similar(JSONObject(back.toJson())))
     }
