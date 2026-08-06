@@ -36,6 +36,8 @@ android {
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
+                // A keystore é PKCS12 (formato que o keytool moderno também gera).
+                storeType = "PKCS12"
             }
         }
     }
