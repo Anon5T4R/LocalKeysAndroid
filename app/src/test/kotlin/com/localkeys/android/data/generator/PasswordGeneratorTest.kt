@@ -54,7 +54,7 @@ class PasswordGeneratorTest {
     fun comprimento_menor_que_classes_falha() {
         try {
             PasswordGenerator.generate(
-                PasswordGenerator.Options(length = 3, lowercase = true, uppercase = true, digits = true),
+                PasswordGenerator.Options(length = 2, lowercase = true, uppercase = true, digits = true),
             )
             fail("deveria lançar")
         } catch (e: IllegalArgumentException) {

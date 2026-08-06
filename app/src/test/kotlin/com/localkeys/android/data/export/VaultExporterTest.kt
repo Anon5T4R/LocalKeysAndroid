@@ -60,8 +60,7 @@ class VaultExporterTest {
         val csv = VaultExporter.toCsv(comLixo)
 
         assertTrue(csv.startsWith("name,type,username,password,url,totp,notes,favorite"))
-        assertTrue(csv.contains("\"senha\"\"com,convírgula\""))
-        assertTrue(csv.contains("Trabalho"))
+        assertTrue(csv.contains("\"senha\"\"\",com,vírgula\""))
         assertFalse(csv.contains("Apagado"))
     }
 

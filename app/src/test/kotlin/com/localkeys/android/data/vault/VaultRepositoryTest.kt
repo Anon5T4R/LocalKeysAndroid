@@ -252,14 +252,14 @@ class VaultRepositoryTest {
     @Test
     fun add_folder_entra_no_vault_e_persiste_no_arquivo() {
         repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
-        val updated = repository.addFolder(Folder("f1", "Trabalho"))
+        val updated = repository.addFolder(Folder("f2", "Trabalho"))
         assertEquals(2, updated.folders.size)
-        assertEquals("Trabalho", repository.vault.folders.first { it.id == "f1" }.name)
+        assertEquals("Trabalho", repository.vault.folders.first { it.id == "f2" }.name)
 
         val saved = repository.save()
         val reopened = Vault.parse(String(crypto.openVault(TkeysCryptoTest.FIXTURE_PASSWORD, saved).plaintext))
         assertEquals(2, reopened.folders.size)
-        assertTrue(reopened.folders.any { it.id == "f1" && it.name == "Trabalho" })
+        assertTrue(reopened.folders.any { it.id == "f2" && it.name == "Trabalho" })
     }
 
     @Test
