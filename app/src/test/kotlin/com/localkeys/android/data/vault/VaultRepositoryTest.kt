@@ -172,4 +172,78 @@ class VaultRepositoryTest {
         assertEquals(3, reopened.items.size)
         assertEquals("imp1", reopened.items[2].id)
     }
+
+    // ── CRUD manual ──────────────────────────────────────────────────────
+
+    private fun login(id: String, name: String): Item = Item(
+        id = id, kind = ItemKind.LOGIN, name = name, favorite = false,
+        folderId = null, notes = "", createdAt = 1, updatedAt = 1, deletedAt = null,
+        login = Login(username = "", password = "", uris = emptyList(), totp = ""),
+        card = null, identity = null, passwordHistory = emptyList(),
+        customFields = emptyList(), attachments = emptyList(),
+    )
+
+    @Test
+    fun add_item_entra_no_fim_e_persiste_no_arquivo() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val novo = login("add1", "Manual")
+        val updated = repository.addItem(novo)
+        assertEquals(3, updated.items.size)
+        assertEquals("Manual", repository.vault.items[2].name)
+
+        val saved = repository.save()
+        val reopened = Vault.parse(String(crypto.openVault(TkeysCryptoTest.FIXTURE_PASSWORD, saved).plaintext))
+        assertEquals(3, reopened.items.size)
+        assertEquals("add1", reopened.items[2].id)
+    }
+
+    @Test
+    fun update_item_substitui_pelo_mesmo_id_sem_duplicar() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val gmail = repository.vault.items.first { it.name == "gmail" }
+        val edited = gmail.copy(name = "gmail-renomeado", login = gmail.login?.copy(username = "novo@email.com"))
+        val updated = repository.updateItem(edited)
+        assertEquals(2, updated.items.size)
+        assertEquals("gmail-renomeado", repository.vault.items.first { it.id == gmail.id }.name)
+        assertEquals("novo@email.com", repository.vault.items.first { it.id == gmail.id }.login?.username)
+    }
+
+    @Test
+    fun update_item_id_inexistente_nao_duplica_estado() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        repository.updateItem(login("nao-existe", "Fantasma"))
+        assertEquals(2, repository.vault.items.size)
+    }
+
+    @Test
+    fun delete_item_remove_do_vault_e_do_arquivo() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val gmail = repository.vault.items.first { it.name == "gmail" }
+        val updated = repository.deleteItem(gmail.id)
+        assertEquals(1, updated.items.size)
+        assertEquals(ItemKind.NOTE, updated.items[0].kind)
+
+        val saved = repository.save()
+        val reopened = Vault.parse(String(crypto.openVault(TkeysCryptoTest.FIXTURE_PASSWORD, saved).plaintext))
+        assertEquals(1, reopened.items.size)
+    }
+
+    @Test
+    fun toggle_favorite_alterna_a_flag_do_item() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val gmail = repository.vault.items.first { it.name == "gmail" }
+        assertFalse(gmail.favorite)
+        repository.toggleFavorite(gmail.id)
+        assertTrue(repository.vault.items.first { it.id == gmail.id }.favorite)
+        repository.toggleFavorite(gmail.id)
+        assertFalse(repository.vault.items.first { it.id == gmail.id }.favorite)
+    }
+
+    @Test
+    fun crud_lança_se_o_vault_estiver_trancado() {
+        assertThrows(IllegalStateException::class.java) { repository.addItem(login("x", "X")) }
+        assertThrows(IllegalStateException::class.java) { repository.updateItem(login("x", "X")) }
+        assertThrows(IllegalStateException::class.java) { repository.deleteItem("x") }
+        assertThrows(IllegalStateException::class.java) { repository.toggleFavorite("x") }
+    }
 }

@@ -21,6 +21,7 @@ import com.localkeys.android.data.import.Importers
 import com.localkeys.android.data.store.SettingsStore
 import com.localkeys.android.data.vault.Item
 import com.localkeys.android.data.vault.Vault
+import com.localkeys.android.data.vault.VaultAutofillCache
 import com.localkeys.android.data.vault.VaultRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -148,6 +149,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(busy = true, error = null) }
             try {
                 val vault = repository.unlock(blob, password)
+                syncAutofillCache(vault)
                 _state.update { it.copy(vault = vault, screen = Screen.Vault, busy = false) }
             } catch (e: TkeysError) {
                 _state.update { it.copy(error = e.message, busy = false) }
@@ -178,6 +180,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 if (!written) throw IOException("não foi possível escrever o cofre")
                 settings.setVaultUri(uri.toString())
+                syncAutofillCache(repository.vault)
                 _state.update { it.copy(vault = repository.vault, screen = Screen.Vault, busy = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(error = "Não foi possível criar o cofre: ${e.message}", busy = false) }
@@ -241,6 +244,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val key = biometricKey.unwrapWithCipher(Hex.decode(hex), cipher)
                 val vault = repository.unlockWithKey(key, blob)
+                syncAutofillCache(vault)
                 _state.update { it.copy(vault = vault, screen = Screen.Vault, busy = false) }
             } catch (e: Exception) {
                 // Cadastrar dedo/rosto novo invalida a chave do Keystore →
@@ -356,6 +360,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (!written) throw IOException("não foi possível gravar o cofre")
             encryptedImport = null
+            syncAutofillCache(merged)
             _state.update {
                 it.copy(
                     busy = false,
@@ -372,10 +377,73 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ── Editar / criar / excluir itens ───────────────────────────────────
+
+    /** Cria (id novo) ou atualiza (id existente) um item e grava no arquivo. */
+    fun saveItem(item: Item) {
+        if (_state.value.vaultUri == null) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _state.update { it.copy(busy = true, error = null) }
+            try {
+                val isNew = repository.vault.items.none { it.id == item.id }
+                val updated = if (isNew) repository.addItem(item) else repository.updateItem(item)
+                persistAndCommit(updated, notice = if (isNew) "Item adicionado." else "Item atualizado.")
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Falha ao salvar o item: ${e.message}", busy = false) }
+            }
+        }
+    }
+
+    /** Remove um item e grava no arquivo. */
+    fun deleteItem(id: String) {
+        if (_state.value.vaultUri == null) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _state.update { it.copy(busy = true, error = null) }
+            try {
+                val updated = repository.deleteItem(id)
+                persistAndCommit(updated, notice = "Item removido.")
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Falha ao remover o item: ${e.message}", busy = false) }
+            }
+        }
+    }
+
+    /** Alterna o favorito de um item e grava no arquivo. */
+    fun toggleFavorite(id: String) {
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                val updated = repository.toggleFavorite(id)
+                persistAndCommit(updated, notice = null)
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Falha ao atualizar o favorito: ${e.message}", busy = false) }
+            }
+        }
+    }
+
+    /** Recifra com nonce novo e grava no arquivo associado ao cofre. */
+    private suspend fun persistAndCommit(updated: Vault, notice: String?) {
+        val file = repository.save()
+        val uri = _state.value.vaultUri
+            ?: throw IOException("cofre não está associado a um arquivo")
+        val written = withContext(Dispatchers.IO) {
+            getApplication<Application>().contentResolver
+                .openOutputStream(Uri.parse(uri))?.use { it.write(file) } != null
+        }
+        if (!written) throw IOException("não foi possível gravar o cofre")
+        syncAutofillCache(updated)
+        _state.update { it.copy(vault = updated, busy = false, notice = notice) }
+    }
+
+    /** Mantém o cache do autofill em sincronia com o estado do cofre. */
+    private fun syncAutofillCache(vault: Vault?) {
+        if (vault == null) VaultAutofillCache.clear() else VaultAutofillCache.set(vault)
+    }
+
     // ── Travar / limpar ──────────────────────────────────────────────────
 
     fun lock() {
         repository.lock()
+        syncAutofillCache(null)
         _state.update { it.copy(vault = null, screen = Screen.Unlock) }
     }
 

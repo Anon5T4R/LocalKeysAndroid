@@ -23,8 +23,8 @@ android {
         applicationId = "com.localkeys.android"
         minSdk = 28
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
 
         vectorDrawables { useSupportLibrary = true }
         // Smoke test no emulador (CI): abrir o app de verdade e ver a UI subir.
@@ -112,6 +112,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // Ícones por tipo de item (VpnKey/Description/CreditCard/Badge etc.) e
+    // ações (busca, estrela, editar/excluir). O R8 poda os não usados.
+    implementation("androidx.compose.material:material-icons-extended")
 
     // ── Cripto: libsodium (Argon2id + XChaCha20-Poly1305) ────────────────
     // lazysodium-android traz o libsodium nativo para todos os ABIs; o @aar do

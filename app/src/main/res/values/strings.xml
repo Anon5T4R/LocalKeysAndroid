@@ -28,7 +28,9 @@
     <string name="vault_save">Salvar</string>
     <string name="vault_lock">Travar</string>
     <string name="vault_import">Importar</string>
-    <string name="vault_empty">Seu cofre está vazio. Crie os itens no desktop e salve aqui.</string>
+    <string name="vault_add">Adicionar</string>
+    <string name="vault_empty">Seu cofre está vazio. Toque em + para adicionar o primeiro item.</string>
+    <string name="search_placeholder">Buscar…</string>
 
     <!-- Importar de outro gerenciador -->
     <string name="import_title">Importar de outro gerenciador</string>
@@ -68,4 +70,30 @@
     <string name="field_phone">Telefone</string>
     <string name="field_address">Endereço</string>
     <string name="field_notes">Notas</string>
+    <string name="field_totp">Chave TOTP</string>
+
+    <!-- Editor de item -->
+    <string name="editor_new_title">Novo item</string>
+    <string name="editor_edit_title">Editar item</string>
+    <string name="editor_name_label">Nome</string>
+    <string name="editor_kind_label">Tipo</string>
+    <string name="editor_save">Salvar</string>
+    <string name="editor_cancel">Cancelar</string>
+    <string name="editor_favorite">Favorito</string>
+    <string name="kind_login">Login</string>
+    <string name="kind_note">Nota</string>
+    <string name="kind_card">Cartão</string>
+    <string name="kind_identity">Identidade</string>
+
+    <!-- Detalhe / editar / excluir -->
+    <string name="item_edit">Editar</string>
+    <string name="item_delete">Excluir</string>
+    <string name="delete_title">Remover item</string>
+    <string name="delete_message">Remover "%1$s"? Esta ação não pode ser desfeita.</string>
+    <string name="item_favorite">Favoritar</string>
+    <string name="item_unfavorite">Desfavoritar</string>
+
+    <!-- Autofill -->
+    <string name="autofill_service_label">Preenchimento do LocalKeys</string>
+    <string name="autofill_unlock">Desbloquear o LocalKeys</string>
 </resources>

@@ -23,5 +23,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Autofill nativo (API do SO, sem Play Services). Aparece em
+             Configurações > Senhas e contas > Autofill depois de ativado. -->
+        <service
+            android:name=".autofill.LocalKeysAutofillService"
+            android:exported="true"
+            android:label="@string/autofill_service_label"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.autofill"
+                android:resource="@xml/autofill_service_config" />
+        </service>
     </application>
 </manifest>

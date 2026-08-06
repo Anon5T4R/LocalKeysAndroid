@@ -48,6 +48,9 @@ fun LocalKeysApp(
             onPickImport = onPickImport,
             onImportPassword = viewModel::onImportPassword,
             onDismissImport = viewModel::dismissImport,
+            onSaveItem = viewModel::saveItem,
+            onDeleteItem = viewModel::deleteItem,
+            onToggleFavorite = viewModel::toggleFavorite,
             onNoticeShown = viewModel::consumeNotice,
             modifier = modifier,
         )

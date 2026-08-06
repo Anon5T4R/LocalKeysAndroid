@@ -73,6 +73,38 @@ class VaultRepository(private val crypto: TkeysCrypto) {
         return merged
     }
 
+    /** Adiciona um item novo ao vault atual (em memória). */
+    fun addItem(item: Item): Vault {
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val updated = v.copy(items = v.items + item)
+        current = updated
+        return updated
+    }
+
+    /** Substitui um item existente (mesmo id) no vault atual. */
+    fun updateItem(item: Item): Vault {
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val updated = v.copy(items = v.items.map { if (it.id == item.id) item else it })
+        current = updated
+        return updated
+    }
+
+    /** Remove um item pelo id. */
+    fun deleteItem(id: String): Vault {
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val updated = v.copy(items = v.items.filterNot { it.id == id })
+        current = updated
+        return updated
+    }
+
+    /** Alterna o favorito de um item. */
+    fun toggleFavorite(id: String): Vault {
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val updated = v.copy(items = v.items.map { if (it.id == id) it.copy(favorite = !it.favorite) else it })
+        current = updated
+        return updated
+    }
+
     /** Descarta a sessão e o plaintext (travar o cofre). */
     fun lock() {
         session = null

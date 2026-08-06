@@ -2,6 +2,7 @@ package com.localkeys.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,11 +13,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -32,9 +46,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -52,6 +69,8 @@ import com.localkeys.android.data.vault.Vault
 import com.localkeys.android.ui.VaultViewModel.PendingImport
 import kotlinx.coroutines.delay
 
+private val FavoriteAmber = Color(0xFFFFB300)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultScreen(
@@ -68,6 +87,9 @@ fun VaultScreen(
     onPickImport: () -> Unit,
     onImportPassword: (String) -> Unit,
     onDismissImport: () -> Unit,
+    onSaveItem: (Item) -> Unit,
+    onDeleteItem: (String) -> Unit,
+    onToggleFavorite: (String) -> Unit,
     onNoticeShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -76,10 +98,14 @@ fun VaultScreen(
     val context = LocalContext.current
     val copy: (String) -> Unit = { text ->
         clipboard.setText(AnnotatedString(text))
-        android.widget.Toast.makeText(context, com.localkeys.android.R.string.copy_copied, android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(context, R.string.copy_copied, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     var selected by remember { mutableStateOf<Item?>(null) }
+    var editing by remember { mutableStateOf<Item?>(null) }
+    var editorOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf<Item?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
 
     // Tick de 1 s para os códigos TOTP ao vivo.
     var tick by remember { mutableLongStateOf(0L) }
@@ -97,65 +123,155 @@ fun VaultScreen(
         }
     }
 
+    // Busca + favoritos primeiro, depois nome.
+    val visibleItems = remember(vault.items, query) {
+        val q = query.trim().lowercase()
+        val filtered = if (q.isEmpty()) {
+            vault.items
+        } else {
+            vault.items.filter { item ->
+                item.name.lowercase().contains(q) ||
+                    item.login?.username?.lowercase()?.contains(q) == true ||
+                    item.notes.lowercase().contains(q)
+            }
+        }
+        filtered.sortedWith(compareByDescending<Item> { it.favorite }.thenBy { it.name.lowercase() })
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(com.localkeys.android.R.string.app_name)) },
+                title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     TextButton(onClick = onPickImport, enabled = !busy) {
-                        Text(stringResource(com.localkeys.android.R.string.vault_import))
+                        Text(stringResource(R.string.vault_import))
                     }
                     TextButton(onClick = onSave, enabled = !busy) {
-                        Text(stringResource(com.localkeys.android.R.string.vault_save))
+                        Text(stringResource(R.string.vault_save))
                     }
                     TextButton(onClick = onLock, enabled = !busy) {
-                        Text(stringResource(com.localkeys.android.R.string.vault_lock))
+                        Text(stringResource(R.string.vault_lock))
                     }
                 },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    editing = null
+                    editorOpen = true
+                },
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.vault_add))
+            }
+        },
         modifier = modifier,
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item {
-                BiometricCard(
-                    biometricAvailable = biometricAvailable,
-                    onEnable = onEnableBiometric,
-                    onDisable = onDisableBiometric,
-                )
-            }
-            if (error != null) {
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text(stringResource(R.string.search_placeholder)) },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 item {
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
+                    BiometricCard(
+                        biometricAvailable = biometricAvailable,
+                        onEnable = onEnableBiometric,
+                        onDisable = onDisableBiometric,
                     )
                 }
-            }
-            if (vault.items.isEmpty()) {
-                item {
-                    Text(
-                        text = stringResource(com.localkeys.android.R.string.vault_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 24.dp),
+                if (error != null) {
+                    item {
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                if (visibleItems.isEmpty()) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.vault_empty),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 24.dp),
+                        )
+                    }
+                }
+                items(visibleItems, key = { it.id }) { item ->
+                    ItemRow(
+                        item = item,
+                        nowSeconds = tick,
+                        onClick = { selected = item },
+                        onToggleFavorite = { onToggleFavorite(item.id) },
                     )
                 }
-            }
-            items(vault.items, key = { it.id }) { item ->
-                ItemRow(item = item, nowSeconds = tick, onClick = { selected = item })
             }
         }
     }
 
     selected?.let { item ->
-        ItemDetailDialog(item = item, onCopy = copy, onDismiss = { selected = null })
+        ItemDetailDialog(
+            item = item,
+            onCopy = copy,
+            onEdit = {
+                editing = item
+                editorOpen = true
+            },
+            onDelete = { confirmDelete = item },
+            onToggleFavorite = { onToggleFavorite(item.id) },
+            onDismiss = { selected = null },
+        )
+    }
+
+    if (editorOpen) {
+        ItemEditorDialog(
+            initial = editing,
+            busy = busy,
+            onSave = { item ->
+                onSaveItem(item)
+                editorOpen = false
+                editing = null
+            },
+            onDismiss = {
+                editorOpen = false
+                editing = null
+            },
+        )
+    }
+
+    confirmDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(stringResource(R.string.delete_title)) },
+            text = { Text(stringResource(R.string.delete_message, item.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteItem(item.id)
+                        confirmDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.item_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) {
+                    Text(stringResource(R.string.editor_cancel))
+                }
+            },
+        )
     }
 
     pendingImport?.let { pending ->
@@ -185,32 +301,32 @@ private fun ImportDialog(
     var show by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(com.localkeys.android.R.string.import_title)) },
+        title = { Text(stringResource(R.string.import_title)) },
         text = {
             Column {
                 Text(
-                    text = stringResource(com.localkeys.android.R.string.import_file, pending.fileName),
+                    text = stringResource(R.string.import_file, pending.fileName),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = stringResource(com.localkeys.android.R.string.import_encrypted_hint),
+                    text = stringResource(R.string.import_encrypted_hint),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text(stringResource(com.localkeys.android.R.string.import_password_label)) },
+                    label = { Text(stringResource(R.string.import_password_label)) },
                     singleLine = true,
                     visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         TextButton(onClick = { show = !show }) {
                             Text(
                                 stringResource(
-                                    if (show) com.localkeys.android.R.string.unlock_hide
-                                    else com.localkeys.android.R.string.unlock_show
+                                    if (show) R.string.unlock_hide
+                                    else R.string.unlock_show
                                 ),
                             )
                         }
@@ -229,12 +345,12 @@ private fun ImportDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(password) }, enabled = password.isNotBlank() && !busy) {
-                Text(stringResource(com.localkeys.android.R.string.import_confirm))
+                Text(stringResource(R.string.import_confirm))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(com.localkeys.android.R.string.import_cancel))
+                Text(stringResource(R.string.import_cancel))
             }
         },
     )
@@ -249,15 +365,15 @@ private fun BiometricCard(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = stringResource(com.localkeys.android.R.string.biometric_title),
+                text = stringResource(R.string.biometric_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = stringResource(
-                    if (biometricAvailable) com.localkeys.android.R.string.biometric_active
-                    else com.localkeys.android.R.string.biometric_hint
+                    if (biometricAvailable) R.string.biometric_active
+                    else R.string.biometric_hint
                 ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -265,11 +381,11 @@ private fun BiometricCard(
             Spacer(Modifier.height(8.dp))
             if (biometricAvailable) {
                 TextButton(onClick = onDisable) {
-                    Text(stringResource(com.localkeys.android.R.string.biometric_disable))
+                    Text(stringResource(R.string.biometric_disable))
                 }
             } else {
                 Button(onClick = onEnable) {
-                    Text(stringResource(com.localkeys.android.R.string.biometric_enable))
+                    Text(stringResource(R.string.biometric_enable))
                 }
             }
         }
@@ -278,50 +394,78 @@ private fun BiometricCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ItemRow(item: Item, nowSeconds: Long, onClick: () -> Unit) {
+private fun ItemRow(item: Item, nowSeconds: Long, onClick: () -> Unit, onToggleFavorite: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(text = item.name, style = MaterialTheme.typography.titleMedium)
-            when (item.kind) {
-                ItemKind.LOGIN -> {
-                    val login = item.login
-                    if (login != null && login.username.isNotBlank()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = itemIcon(item.kind),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = item.name, style = MaterialTheme.typography.titleMedium)
+                when (item.kind) {
+                    ItemKind.LOGIN -> {
+                        val login = item.login
+                        if (login != null && login.username.isNotBlank()) {
+                            Text(
+                                text = login.username,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (login?.totp?.isNotBlank() == true) {
+                            Spacer(Modifier.height(8.dp))
+                            TotpRow(secret = login.totp)
+                        }
+                    }
+                    ItemKind.NOTE -> if (item.notes.isNotBlank()) {
                         Text(
-                            text = login.username,
+                            text = item.notes,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                    ItemKind.CARD -> item.card?.let { card ->
+                        Text(
+                            text = card.brand.ifBlank { card.cardholder },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (login?.totp?.isNotBlank() == true) {
-                        Spacer(Modifier.height(8.dp))
-                        TotpRow(secret = login.totp)
+                    ItemKind.IDENTITY -> item.identity?.let { identity ->
+                        Text(
+                            text = listOf(identity.firstName, identity.lastName).filter { it.isNotBlank() }.joinToString(" "),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
-                ItemKind.NOTE -> if (item.notes.isNotBlank()) {
-                    Text(
-                        text = item.notes,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-                ItemKind.CARD -> item.card?.let { card ->
-                    Text(
-                        text = card.brand.ifBlank { card.cardholder },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                ItemKind.IDENTITY -> item.identity?.let { identity ->
-                    Text(
-                        text = listOf(identity.firstName, identity.lastName).filter { it.isNotBlank() }.joinToString(" "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            }
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    imageVector = if (item.favorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = stringResource(
+                        if (item.favorite) R.string.item_unfavorite else R.string.item_favorite
+                    ),
+                    tint = if (item.favorite) FavoriteAmber else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
+}
+
+@Composable
+private fun itemIcon(kind: ItemKind): ImageVector = when (kind) {
+    ItemKind.LOGIN -> Icons.Outlined.VpnKey
+    ItemKind.NOTE -> Icons.Outlined.Description
+    ItemKind.CARD -> Icons.Outlined.CreditCard
+    ItemKind.IDENTITY -> Icons.Outlined.Person
 }
 
 /**
@@ -351,11 +495,27 @@ private fun TotpRow(secret: String) {
 private fun ItemDetailDialog(
     item: Item,
     onCopy: (String) -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(item.name) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = item.name, modifier = Modifier.weight(1f))
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (item.favorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                        contentDescription = stringResource(
+                            if (item.favorite) R.string.item_unfavorite else R.string.item_favorite
+                        ),
+                        tint = if (item.favorite) FavoriteAmber else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 when (item.kind) {
@@ -390,8 +550,19 @@ private fun ItemDetailDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_close))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onEdit) {
+                    Text(stringResource(R.string.item_edit))
+                }
+                TextButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.item_delete))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.dialog_close))
+                }
             }
         },
     )
