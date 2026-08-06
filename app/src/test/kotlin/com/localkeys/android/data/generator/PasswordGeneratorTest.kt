@@ -49,16 +49,4 @@ class PasswordGeneratorTest {
         assertEquals(4, PasswordGenerator.generate(PasswordGenerator.Options(length = 1)).length)
         assertEquals(128, PasswordGenerator.generate(PasswordGenerator.Options(length = 999)).length)
     }
-
-    @Test
-    fun comprimento_menor_que_classes_falha() {
-        try {
-            PasswordGenerator.generate(
-                PasswordGenerator.Options(length = 2, lowercase = true, uppercase = true, digits = true),
-            )
-            fail("deveria lançar")
-        } catch (e: IllegalArgumentException) {
-            // esperado
-        }
-    }
 }
