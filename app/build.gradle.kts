@@ -23,10 +23,12 @@ android {
         applicationId = "com.localkeys.android"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         vectorDrawables { useSupportLibrary = true }
+        // Smoke test no emulador (CI): abrir o app de verdade e ver a UI subir.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -148,6 +150,12 @@ dependencies {
     testImplementation("com.goterl:lazysodium-java:5.1.4")
     // BouncyCastle roda puro na JVM (mesmo código do Argon2id do app).
     testImplementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+
+    // ── Testes instrumentados (smoke no emulador do CI) ──────────────────
+    // Rodam o APK de verdade num emulador Android e pegam crash de startup
+    // (ex.: o Application inexistente do manifest que matou a v0.1.0 na hora).
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 
     // ── Debug / preview ──────────────────────────────────────────────────
     debugImplementation("androidx.compose.ui:ui-tooling")
