@@ -3,6 +3,8 @@ package com.localkeys.android.data.vault
 import com.localkeys.android.data.crypto.OpenedVault
 import com.localkeys.android.data.crypto.SessionKey
 import com.localkeys.android.data.crypto.TkeysCrypto
+import com.localkeys.android.data.crypto.TkeysError
+import org.json.JSONObject
 
 /**
  * Estado vivo do vault na memória — espelho do `AppState` do desktop (`lib.rs`):
@@ -39,7 +41,13 @@ class VaultRepository(private val crypto: TkeysCrypto) {
     }
 
     private fun open(opened: OpenedVault): Vault {
-        val vault = Vault.parse(String(opened.plaintext))
+        val vault = try {
+            Vault.parse(String(opened.plaintext))
+        } catch (e: Exception) {
+            // Decifrou com a senha certa, mas o conteúdo não é um vault válido —
+            // arquivo corrompido/truncado, não "senha incorreta".
+            throw TkeysError.Corrupted
+        }
         session = opened.session
         current = vault
         return vault
@@ -57,6 +65,31 @@ class VaultRepository(private val crypto: TkeysCrypto) {
     fun save(): ByteArray {
         val s = session ?: throw IllegalStateException("vault não está destrancado")
         return s.seal(vault.toJson().toByteArray())
+    }
+
+    /**
+     * Valida um blob recém-cifrado antes de gravar: decifra com a chave da
+     * sessão (sem re-rodar o Argon2id) e confere que o conteúdo é exatamente o
+     * vault atual. Garante que nunca gravamos um arquivo que não reabriria.
+     * Lança [TkeysError.Corrupted] se o blob não reabrir ou divergir do vault.
+     */
+    fun verifySaved(blob: ByteArray): Vault {
+        val s = session ?: throw IllegalStateException("vault não está destrancado")
+        val v = current ?: throw IllegalStateException("vault não está destrancado")
+        val plaintext = try {
+            crypto.openWithKey(s.keyBytes(), blob)
+        } catch (e: TkeysError) {
+            throw TkeysError.Corrupted
+        }
+        val reparsed = try {
+            Vault.parse(String(plaintext))
+        } catch (e: Exception) {
+            throw TkeysError.Corrupted
+        }
+        val expected = JSONObject(v.toJson())
+        val got = JSONObject(reparsed.toJson())
+        if (!expected.similar(got)) throw TkeysError.Corrupted
+        return reparsed
     }
 
     /** Cópia da chave derivada (32 bytes) para o cofre biométrico. */

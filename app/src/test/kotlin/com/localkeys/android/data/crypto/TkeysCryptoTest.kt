@@ -138,6 +138,14 @@ class TkeysCryptoTest {
         }
     }
 
+    @Test
+    fun arquivo_truncado_e_corrompido_nao_senha_errada() {
+        val truncated = fixtureBytes().copyOfRange(0, TkeysFormat.HEADER_LEN + 8)
+        assertThrows(TkeysError.Corrupted::class.java) {
+            crypto.openVault(FIXTURE_PASSWORD, truncated)
+        }
+    }
+
     // ── Round-trip interno (cria → abre) ──────────────────────────────────
 
     @Test

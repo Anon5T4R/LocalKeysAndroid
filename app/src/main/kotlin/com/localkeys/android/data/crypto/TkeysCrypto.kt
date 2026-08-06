@@ -23,6 +23,9 @@ sealed class TkeysError : Exception() {
     object Decrypt : TkeysError() {
         override val message: String get() = "senha incorreta ou arquivo corrompido/adulterado"
     }
+    object Corrupted : TkeysError() {
+        override val message: String get() = "arquivo corrompido (estrutura inválida)"
+    }
 }
 
 /**
@@ -104,7 +107,7 @@ class TkeysCrypto(private val ls: LazySodium) {
         require(key.size == TkeysFormat.KEY_LEN) { "chave deve ter ${TkeysFormat.KEY_LEN} bytes" }
         val header = parseHeader(file)
         val ciphertext = file.copyOfRange(TkeysFormat.HEADER_LEN, file.size)
-        if (ciphertext.size < AEAD.XCHACHA20POLY1305_IETF_ABYTES) throw TkeysError.Decrypt
+        if (ciphertext.size < AEAD.XCHACHA20POLY1305_IETF_ABYTES) throw TkeysError.Corrupted
         val aad = file.copyOfRange(0, TkeysFormat.HEADER_LEN)
         val plaintext = ByteArray(ciphertext.size - AEAD.XCHACHA20POLY1305_IETF_ABYTES)
         val plainLen = longArrayOf(0)

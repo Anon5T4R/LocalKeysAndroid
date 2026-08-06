@@ -1,6 +1,7 @@
 package com.localkeys.android.ui
 
 import android.app.Application
+import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -180,17 +181,17 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(busy = true, error = null) }
             try {
                 val file = repository.create(Vault.empty(), password)
-                val written = withContext(Dispatchers.IO) {
-                    val resolver = getApplication<Application>().contentResolver
+                repository.verifySaved(file) // nunca grava um blob que não reabriria
+                val resolver = getApplication<Application>().contentResolver
+                withContext(Dispatchers.IO) {
                     runCatching {
                         resolver.takePersistableUriPermission(
                             uri,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                         )
                     }
-                    resolver.openOutputStream(uri)?.use { it.write(file) } != null
                 }
-                if (!written) throw IOException("não foi possível escrever o cofre")
+                writeAndVerify(resolver, uri, file)
                 settings.setVaultUri(uri.toString())
                 syncAutofillCache(repository.vault)
                 _state.update { it.copy(vault = repository.vault, screen = Screen.Vault, busy = false) }
@@ -208,11 +209,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(busy = true, error = null) }
             try {
                 val file = repository.save()
-                val ok = withContext(Dispatchers.IO) {
-                    getApplication<Application>().contentResolver
-                        .openOutputStream(Uri.parse(uri))?.use { it.write(file) } != null
-                }
-                if (!ok) throw IOException("não foi possível salvar")
+                repository.verifySaved(file) // nunca grava um blob que não reabriria
+                val resolver = getApplication<Application>().contentResolver
+                writeAndVerify(resolver, Uri.parse(uri), file)
                 _state.update { it.copy(busy = false, notice = "Cofre salvo.") }
             } catch (e: Exception) {
                 _state.update { it.copy(error = "Falha ao salvar: ${e.message}", busy = false) }
@@ -384,13 +383,10 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val merged = repository.appendItems(items)
             val file = repository.save()
+            repository.verifySaved(file) // nunca grava um blob que não reabriria
             val uri = _state.value.vaultUri
                 ?: throw IOException("cofre não está associado a um arquivo")
-            val written = withContext(Dispatchers.IO) {
-                getApplication<Application>().contentResolver
-                    .openOutputStream(Uri.parse(uri))?.use { it.write(file) } != null
-            }
-            if (!written) throw IOException("não foi possível gravar o cofre")
+            writeAndVerify(getApplication<Application>().contentResolver, Uri.parse(uri), file)
             encryptedImport = null
             pendingKdbx = null
             syncAutofillCache(merged)
@@ -498,18 +494,49 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Recifra com nonce novo e grava no arquivo associado ao cofre. */
+    /**
+     * Recifra com nonce novo, **valida o blob antes de gravar** (decifra com a
+     * sessão e confere que reabre exatamente o vault atual) e, depois de gravar,
+     * **relê o documento** para conferir que o provider não truncou/embaralhou
+     * nada — se falhou, reescreve uma vez. O estado só é comitado se o arquivo
+     * gravado reabre de verdade.
+     */
     private suspend fun persistAndCommit(updated: Vault, notice: String?) {
         val file = repository.save()
+        repository.verifySaved(file) // nunca grava um blob que não reabriria
         val uri = _state.value.vaultUri
             ?: throw IOException("cofre não está associado a um arquivo")
-        val written = withContext(Dispatchers.IO) {
-            getApplication<Application>().contentResolver
-                .openOutputStream(Uri.parse(uri))?.use { it.write(file) } != null
-        }
-        if (!written) throw IOException("não foi possível gravar o cofre")
+        writeAndVerify(getApplication<Application>().contentResolver, Uri.parse(uri), file)
         syncAutofillCache(updated)
         _state.update { it.copy(vault = updated, busy = false, notice = notice) }
+    }
+
+    /**
+     * Grava o blob no documento SAF e confere **relendo o que ficou gravado**
+     * (abre com a sessão e confere o conteúdo): se o provider truncou ou
+     * corrompeu, reescreve uma vez. Lança [IOException] se o arquivo gravado
+     * não reabre — o estado do chamador nunca é comitado nesse caso.
+     */
+    private suspend fun writeAndVerify(resolver: ContentResolver, document: Uri, file: ByteArray) {
+        fun writeOnce(): Boolean = withContext(Dispatchers.IO) {
+            resolver.openOutputStream(document)?.use { it.write(file) } != null
+        }
+        if (!writeOnce()) throw IOException("não foi possível gravar o cofre")
+        if (writtenIsSane(resolver, document)) return
+        if (!writeOnce()) throw IOException("a gravação saiu corrompida e a correção falhou")
+        if (!writtenIsSane(resolver, document)) throw IOException("arquivo gravado não reabre; tente abrir outro cofre")
+    }
+
+    /** Relê o documento e confere que reabre com a sessão e bate com o vault atual. */
+    private suspend fun writtenIsSane(resolver: ContentResolver, document: Uri): Boolean {
+        val blob = withContext(Dispatchers.IO) {
+            try {
+                resolver.openInputStream(document)?.use { it.readBytes() }
+            } catch (e: Exception) {
+                null
+            }
+        } ?: return false
+        return runCatching { repository.verifySaved(blob) }.isSuccess
     }
 
     /** Mantém o cache do autofill em sincronia com o estado do cofre. */

@@ -355,4 +355,45 @@ class VaultRepositoryTest {
         assertThrows(IllegalStateException::class.java) { repository.renameFolder("x", "Y") }
         assertThrows(IllegalStateException::class.java) { repository.deleteFolder("x") }
     }
+
+    // ── Verificação de gravação (blob só é gravado se reabre) ─────────────
+
+    @Test
+    fun verify_aceita_o_blob_que_o_save_gerou() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val withItem = repository.addItem(login("v1", "verificado"))
+        val blob = repository.save()
+        val reparsed = repository.verifySaved(blob)
+        assertEquals(withItem.items.size, reparsed.items.size)
+        assertEquals("verificado", reparsed.items.first { it.id == "v1" }.name)
+        assertTrue(repository.isUnlocked)
+    }
+
+    @Test
+    fun verify_detecta_blob_adulterado() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        repository.addItem(login("v2", "tamper"))
+        val blob = repository.save()
+        val tampered = blob.copyOf()
+        tampered[tampered.size - 1] = (tampered.last().toInt() xor 0x01).toByte()
+        assertThrows(TkeysError.Corrupted::class.java) { repository.verifySaved(tampered) }
+    }
+
+    @Test
+    fun arquivo_truncado_e_corrompido_nao_senha_errada() {
+        val file = TkeysCryptoTest.fixtureBytes()
+        val truncated = file.copyOfRange(0, TkeysFormat.HEADER_LEN + 8)
+        assertThrows(TkeysError.Corrupted::class.java) {
+            repository.unlock(truncated, TkeysCryptoTest.FIXTURE_PASSWORD)
+        }
+        assertFalse(repository.isUnlocked)
+    }
+
+    @Test
+    fun blob_que_decifra_mas_eh_lixo_e_corrompido() {
+        // Cifra um plaintext que abre com a senha certa, mas não é JSON de vault.
+        val created = crypto.createVault("senha-do-lixo", "isto nao eh um vault".toByteArray())
+        val repo = VaultRepository(crypto)
+        assertThrows(TkeysError.Corrupted::class.java) { repo.unlock(created.file, "senha-do-lixo") }
+    }
 }
