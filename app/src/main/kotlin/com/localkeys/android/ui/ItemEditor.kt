@@ -83,7 +83,7 @@ fun ItemEditorDialog(
     var address by remember { mutableStateOf(initial?.identity?.address ?: "") }
 
     var customFields by remember {
-        mutableStateOf(initial?.customFields?.toMutableList() ?: mutableListOf())
+        mutableStateOf(initial?.customFields?.toMutableList() ?: mutableListOf<CustomField>())
     }
 
     fun addField() {

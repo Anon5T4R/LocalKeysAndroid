@@ -47,7 +47,7 @@ class MainActivity : FragmentActivity() {
         }
 
     private val exportLauncher: ActivityResultLauncher<String> =
-        registerForActivityResult(ActivityResultContracts.CreateDocument(null)) { uri ->
+        registerForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
             if (uri != null) viewModel.onExportUriChosen(uri)
         }
 
