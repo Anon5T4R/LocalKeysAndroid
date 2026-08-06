@@ -38,9 +38,16 @@ class LocalKeysAutofillService : AutofillService() {
         val structure = request.fillContexts.lastOrNull()?.structure
             ?: return callback.onSuccess(null)
 
+        val (usernameId, passwordId) = findAuthFields(structure)
+
         val vault = VaultAutofillCache.unlocked
         if (vault == null) {
-            callback.onSuccess(unlockResponse())
+            callback.onSuccess(unlockResponse(usernameId, passwordId))
+            return
+        }
+
+        if (usernameId == null && passwordId == null) {
+            callback.onSuccess(null)
             return
         }
 
@@ -50,12 +57,6 @@ class LocalKeysAutofillService : AutofillService() {
             null
         }
         val packageName = structure.activityComponent?.packageName
-
-        val (usernameId, passwordId) = findAuthFields(structure)
-        if (usernameId == null && passwordId == null) {
-            callback.onSuccess(null)
-            return
-        }
 
         val logins = AutofillMatcher.loginsFor(vault, packageName, webDomain)
         if (logins.isEmpty()) {
@@ -74,8 +75,14 @@ class LocalKeysAutofillService : AutofillService() {
         callback.onSuccess()
     }
 
-    /** Cofre trancado: oferece um atalho para abrir o app e destrancar. */
-    private fun unlockResponse(): FillResponse {
+    /**
+     * Cofre trancado: devolve uma resposta de "autenticação" — o picker mostra
+     * o atalho e, ao tocar, abre o app para o usuário destrancar. Depois de
+     * voltar ao campo, um novo onFillRequest encontra o vault aberto.
+     */
+    private fun unlockResponse(usernameId: AutofillId?, passwordId: AutofillId?): FillResponse? {
+        val ids = listOfNotNull(usernameId, passwordId).toTypedArray()
+        if (ids.isEmpty()) return null
         val unlockSender = PendingIntent.getActivity(
             this,
             0,
@@ -84,7 +91,7 @@ class LocalKeysAutofillService : AutofillService() {
         ).intentSender
         val view = RemoteViews(packageName, R.layout.autofill_unlock)
         return FillResponse.Builder()
-            .addCustomAction(unlockSender, view, ACTION_UNLOCK)
+            .setAuthentication(ids, unlockSender, view)
             .build()
     }
 
@@ -130,12 +137,6 @@ class LocalKeysAutofillService : AutofillService() {
             any = true
         }
         if (!any) return null
-        val label = login.username.ifBlank { login.uris.firstOrNull() ?: "conta" }
-        builder.setLabel("LocalKeys · $label")
         return builder.build()
-    }
-
-    companion object {
-        private const val ACTION_UNLOCK = "unlock"
     }
 }
