@@ -2,6 +2,9 @@ name: CI
 
 on:
   push:
+    # Só a main: push de tag (v*) não dispara o CI — o release.yml já cuida do
+    # release. Antes, toda tag rodava o CI de novo (duplicava o job).
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
