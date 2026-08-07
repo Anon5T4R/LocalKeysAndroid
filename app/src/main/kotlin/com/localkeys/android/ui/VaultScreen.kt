@@ -259,7 +259,6 @@ fun VaultScreen(
                 items(visibleItems, key = { it.id }) { item ->
                     ItemRow(
                         item = item,
-                        nowSeconds = tick,
                         onClick = { selected = item },
                         onToggleFavorite = { onToggleFavorite(item.id) },
                     )
@@ -537,7 +536,7 @@ private fun BiometricCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ItemRow(item: Item, nowSeconds: Long, onClick: () -> Unit, onToggleFavorite: () -> Unit) {
+private fun ItemRow(item: Item, onClick: () -> Unit, onToggleFavorite: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
