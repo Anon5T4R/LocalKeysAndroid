@@ -27,11 +27,14 @@ class SmokeTest {
 
     @Test
     fun appAbreNaTelaDeDesbloqueio() {
-        // Emulador de CI pode demorar a renderizar a primeira hierarquia Compose;
-        // espera até 60 s em vez de falhar imediato ("No compose hierarchies found").
+        // Emulador de CI pode demorar a subir a primeira hierarquia Compose;
+        // `fetchSemanticsNodes` lança "No compose hierarchies found" se ainda
+        // não existe, então capamos a exceção e pollamos em vez de falhar imediato.
         rule.waitUntil(condition = {
-            rule.onAllNodesWithText("LocalKeys").fetchSemanticsNodes().isNotEmpty()
-        }, timeoutMillis = 60_000)
+            runCatching {
+                rule.onAllNodesWithText("LocalKeys").fetchSemanticsNodes().isNotEmpty()
+            }.getOrDefault(false)
+        }, timeoutMillis = 120_000)
         rule.onNodeWithText("LocalKeys").assertIsDisplayed()
     }
 }
