@@ -2,6 +2,7 @@ package com.localkeys.android
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -26,6 +27,11 @@ class SmokeTest {
 
     @Test
     fun appAbreNaTelaDeDesbloqueio() {
+        // Emulador de CI pode demorar a renderizar a primeira hierarquia Compose;
+        // espera até 60 s em vez de falhar imediato ("No compose hierarchies found").
+        rule.waitUntil(condition = {
+            rule.onAllNodesWithText("LocalKeys").fetchSemanticsNodes().isNotEmpty()
+        }, timeoutMillis = 60_000)
         rule.onNodeWithText("LocalKeys").assertIsDisplayed()
     }
 }

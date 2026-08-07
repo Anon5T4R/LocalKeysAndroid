@@ -90,6 +90,26 @@ class VaultRepository(private val crypto: TkeysCrypto) {
     fun keyBytes(): ByteArray? = session?.keyBytes()
 
     /**
+     * Adota um arquivo modificado externamente (ex.: outro dispositivo
+     * sincronizou uma versão nova via OneDrive/Google Drive): decifra com a
+     * chave da sessão atual (sem re-rodar o Argon2id) e substitui o vault em
+     * memória. Lança [TkeysError.Decrypt] se a senha foi trocada externamente
+     * (a chave já não casa — o caminho é travar e reabrir com a senha nova) e
+     * [TkeysError.Corrupted] se o arquivo externo está corrompido.
+     */
+    fun reload(file: ByteArray): Vault {
+        val s = session ?: throw IllegalStateException("vault não está destrancado")
+        val plaintext = crypto.openWithKey(s.keyBytes(), file)
+        val vault = try {
+            Vault.parse(String(plaintext))
+        } catch (e: Exception) {
+            throw TkeysError.Corrupted
+        }
+        current = vault
+        return vault
+    }
+
+    /**
      * Anexa itens importados ao vault atual (em memória) e devolve o vault novo.
      * A gravação no arquivo é responsabilidade do chamador (`save`).
      */

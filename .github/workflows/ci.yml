@@ -56,6 +56,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      # Os runners Linux do GitHub têm /dev/kvm; sem a permissão o emulador
+      # sobe sem aceleração e estoura o timeout de boot (flake histórico).
+      - name: Habilitar KVM para o emulador
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Smoke test (emulador Android)
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -63,6 +71,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          emulator-boot-timeout: 900
           script: |
             chmod +x gradlew
             ./gradlew connectedDebugAndroidTest --console=plain

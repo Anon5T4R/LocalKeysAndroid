@@ -90,4 +90,23 @@ class TotpTest {
             Totp.generate("!!! não é base32 !!!", 1000)
         }
     }
+
+    // ── at() (função pura do relógio compartilhado da UI) ────────────────
+
+    @Test
+    fun at_deriva_codigo_e_tempo_restante_do_instante_dado() {
+        val secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        val code = Totp.at(secret, 59)
+        // Mesmo código do vetor RFC 6238 (59 s), truncado para 6 dígitos.
+        assertEquals("287082", code.code)
+        assertEquals(30L, code.period)
+        // 59 s = 1 passo completo + 29 s do passo corrente → falta 1 s para virar.
+        assertEquals(1L, code.secondsRemaining)
+    }
+
+    @Test
+    fun at_no_inicio_do_passo_tem_30s_restantes() {
+        val code = Totp.at("JBSWY3DPEHPK3PXP", 90) // múltiplo exato de 30
+        assertEquals(30L, code.secondsRemaining)
+    }
 }

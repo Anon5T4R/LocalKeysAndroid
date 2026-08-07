@@ -6,10 +6,12 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.security.keystore.KeyPermanentlyInvalidatedException
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.goterl.lazysodium.LazySodiumAndroid
 import com.goterl.lazysodium.SodiumAndroid
+import com.localkeys.android.R
 import com.localkeys.android.data.biometric.BiometricVaultKey
 import com.localkeys.android.data.autofill.AutofillMatcher
 import com.localkeys.android.data.crypto.Hex
@@ -40,6 +42,15 @@ import java.io.IOException
 import java.util.UUID
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
+
+/**
+ * O arquivo no disco mudou desde a última leitura/gravação conhecida (ex.: o
+ * OneDrive/Google Drive sincronizou uma versão nova vinda do desktop). Lançada
+ * por [VaultViewModel.writeAndVerify] ANTES de gravar, para nunca sobrescrever
+ * em silêncio o trabalho do outro dispositivo. A UI oferece recarregar ou
+ * sobrescrever.
+ */
+class ExternalChangeException : IOException("o arquivo foi modificado fora do app")
 
 /**
  * Estado da UI + ponte entre telas, `.tkeys` e cofre biométrico do SO.
@@ -74,6 +85,8 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         val error: String? = null,
         val notice: String? = null,
         val pendingImport: PendingImport? = null,
+        /** Arquivo mudou no disco fora do app → UI mostra o diálogo de conflito. */
+        val externalChange: Boolean = false,
     )
 
     private val crypto = TkeysCrypto(LazySodiumAndroid(SodiumAndroid()))
@@ -84,6 +97,12 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    /**
+     * Últimos bytes conhecidos do arquivo no disco. Serve tanto para o unlock
+     * (decifrar) quanto como **baseline da detecção de mudança externa**: antes
+     * de gravar, comparamos o disco atual com isto; depois de gravar, atualizamos
+     * para os bytes recém-gravados.
+     */
     private var cachedBlob: ByteArray? = null
     private var wrappedKeyHex: String? = null
     private var biometricOn: Boolean = false
@@ -131,14 +150,14 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 val bytes = resolver.openInputStream(Uri.parse(uri))?.use { it.readBytes() }
-                    ?: throw IOException("arquivo não encontrado")
+                    ?: throw IOException(str(R.string.err_file_not_found))
                 cachedBlob = bytes
             } catch (e: Exception) {
                 cachedBlob = null
                 _state.update {
                     it.copy(
                         vaultUri = null,
-                        error = "Não foi possível ler o cofre: ${e.message}",
+                        error = str(R.string.msg_load_failed, e.message ?: ""),
                     )
                 }
             } finally {
@@ -150,12 +169,12 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     /** Desbloqueia com a master password (roda o Argon2id em background). */
     fun unlock(password: String) {
         if (password.isBlank()) {
-            _state.update { it.copy(error = "Digite a senha-mestra.") }
+            _state.update { it.copy(error = str(R.string.msg_password_empty)) }
             return
         }
         val blob = cachedBlob
         if (blob == null) {
-            _state.update { it.copy(error = "Nenhum cofre carregado.") }
+            _state.update { it.copy(error = str(R.string.msg_no_vault_loaded)) }
             return
         }
         viewModelScope.launch(Dispatchers.Default) {
@@ -165,7 +184,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 syncAutofillCache(vault)
                 _state.update { it.copy(vault = vault, screen = Screen.Vault, busy = false) }
             } catch (e: TkeysError) {
-                _state.update { it.copy(error = e.message, busy = false) }
+                _state.update { it.copy(error = tkeysErrorMessage(e), busy = false) }
             }
         }
     }
@@ -196,7 +215,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 syncAutofillCache(repository.vault)
                 _state.update { it.copy(vault = repository.vault, screen = Screen.Vault, busy = false) }
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Não foi possível criar o cofre: ${e.message}", busy = false) }
+                _state.update { it.copy(error = str(R.string.msg_create_failed, e.message ?: ""), busy = false) }
             }
         }
     }
@@ -204,19 +223,61 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     // ── Salvar (recifrar e gravar no mesmo arquivo) ──────────────────────
 
     fun save() {
-        val uri = _state.value.vaultUri ?: return
+        if (_state.value.vaultUri == null) return
         viewModelScope.launch(Dispatchers.Default) {
             _state.update { it.copy(busy = true, error = null) }
             try {
-                val file = repository.save()
-                repository.verifySaved(file) // nunca grava um blob que não reabriria
-                val resolver = getApplication<Application>().contentResolver
-                writeAndVerify(resolver, Uri.parse(uri), file)
-                _state.update { it.copy(busy = false, notice = "Cofre salvo.") }
+                persistAndCommit(repository.vault, notice = str(R.string.msg_vault_saved))
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Falha ao salvar: ${e.message}", busy = false) }
+                failSave(e, R.string.op_save)
             }
         }
+    }
+
+    /**
+     * Sobrescreve o arquivo com o vault em memória mesmo havendo mudança externa
+     * (usuário confirmou no diálogo de conflito). Como as edições pendentes já
+     * estão no vault em memória, isto serve de "retry" para qualquer ação que
+     * tenha esbarrado no [ExternalChangeException].
+     */
+    fun forceSave() {
+        if (_state.value.vaultUri == null) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _state.update { it.copy(busy = true, externalChange = false, error = null) }
+            try {
+                persistAndCommit(repository.vault, notice = str(R.string.msg_vault_saved), force = true)
+            } catch (e: Exception) {
+                failSave(e, R.string.op_save)
+            }
+        }
+    }
+
+    /**
+     * Recarrega o arquivo do disco, adotando a versão externa e descartando as
+     * edições em memória não salvas (usuário confirmou no diálogo de conflito).
+     * Reusa a chave da sessão atual, sem pedir a senha de novo.
+     */
+    fun reloadFromDisk() {
+        val uri = _state.value.vaultUri ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(busy = true, externalChange = false, error = null) }
+            try {
+                val resolver = getApplication<Application>().contentResolver
+                val bytes = readDocumentBytes(resolver, Uri.parse(uri))
+                    ?: throw IOException(str(R.string.err_file_not_found))
+                val vault = repository.reload(bytes)
+                cachedBlob = bytes
+                syncAutofillCache(vault)
+                _state.update { it.copy(vault = vault, busy = false, notice = str(R.string.msg_reloaded)) }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = str(R.string.msg_reload_failed, e.message ?: ""), busy = false) }
+            }
+        }
+    }
+
+    /** Fecha o diálogo de conflito sem agir (usuário decide depois). */
+    fun dismissExternalChange() {
+        _state.update { it.copy(externalChange = false) }
     }
 
     // ── Desbloqueio biométrico (chave do vault cifrada no Keystore) ──────
@@ -238,9 +299,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 val wrapped = biometricKey.wrapWithCipher(key, cipher)
                 settings.setWrappedKeyHex(Hex.encode(wrapped))
                 settings.setBiometricEnabled(true)
-                _state.update { it.copy(notice = "Desbloqueio biométrico ativado.") }
+                _state.update { it.copy(notice = str(R.string.msg_biometric_enabled)) }
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Biometria indisponível: ${e.message}") }
+                _state.update { it.copy(error = str(R.string.biometric_unavailable, e.message ?: "")) }
             }
         }
     }
@@ -262,9 +323,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 // o desbloqueio rápido morre e o app volta para a senha.
                 if (e is TkeysError || e is AEADBadTagException || e is KeyPermanentlyInvalidatedException) {
                     disableBiometric()
-                    _state.update { it.copy(error = "Biometria alterada; desbloqueie com a senha.", busy = false) }
+                    _state.update { it.copy(error = str(R.string.msg_biometric_changed), busy = false) }
                 } else {
-                    _state.update { it.copy(error = "Falha na biometria: ${e.message}", busy = false) }
+                    _state.update { it.copy(error = str(R.string.msg_biometric_failed, e.message ?: ""), busy = false) }
                 }
             }
         }
@@ -296,7 +357,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                     null,
                 )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
                 val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: throw IOException("arquivo não encontrado")
+                    ?: throw IOException(str(R.string.err_file_not_found))
                 val content = bytes.toString(Charsets.UTF_8)
 
                 when (val format = Importers.detectFormat(fileName, content)) {
@@ -306,7 +367,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                             it.copy(
                                 busy = false,
                                 pendingImport = PendingImport(
-                                    fileName ?: "cofre KeePass",
+                                    fileName ?: str(R.string.import_default_kdbx),
                                     needsPassword = true,
                                     source = ImportSource.KDBX,
                                 ),
@@ -319,7 +380,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                             it.copy(
                                 busy = false,
                                 pendingImport = PendingImport(
-                                    fileName ?: "export bitwarden",
+                                    fileName ?: str(R.string.import_default_bitwarden),
                                     needsPassword = true,
                                     source = ImportSource.BITWARDEN,
                                 ),
@@ -332,7 +393,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 encryptedImport = null
                 pendingKdbx = null
                 _state.update {
-                    it.copy(busy = false, pendingImport = null, error = e.message ?: "Falha ao importar.")
+                    it.copy(busy = false, pendingImport = null, error = e.message ?: str(R.string.msg_import_generic))
                 }
             }
         }
@@ -342,7 +403,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     fun onImportPassword(password: String) {
         if (encryptedImport == null && pendingKdbx == null) return
         if (password.isBlank()) {
-            _state.update { it.copy(error = "Digite a senha do export.") }
+            _state.update { it.copy(error = str(R.string.msg_import_password_empty)) }
             return
         }
         viewModelScope.launch(Dispatchers.Default) {
@@ -356,7 +417,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 performImport(items, null)
             } catch (e: Exception) {
                 // Senha errada: mantém o diálogo aberto para tentar de novo.
-                _state.update { it.copy(busy = false, error = e.message ?: "Falha ao importar.") }
+                _state.update { it.copy(busy = false, error = e.message ?: str(R.string.msg_import_generic)) }
             }
         }
     }
@@ -375,35 +436,23 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     busy = false,
                     pendingImport = null,
-                    notice = "Nenhum item para importar${fileName?.let { " em $it" } ?: ""}.",
+                    notice = fileName?.let { name -> str(R.string.msg_import_empty_in, name) }
+                        ?: str(R.string.msg_import_empty),
                 )
             }
             return
         }
         try {
             val merged = repository.appendItems(items)
-            val file = repository.save()
-            repository.verifySaved(file) // nunca grava um blob que não reabriria
-            val uri = _state.value.vaultUri
-                ?: throw IOException("cofre não está associado a um arquivo")
-            writeAndVerify(getApplication<Application>().contentResolver, Uri.parse(uri), file)
+            persistAndCommit(merged, notice = str(R.string.msg_imported, items.size))
             encryptedImport = null
             pendingKdbx = null
-            syncAutofillCache(merged)
-            _state.update {
-                it.copy(
-                    busy = false,
-                    pendingImport = null,
-                    vault = merged,
-                    notice = "${items.size} itens importados.",
-                )
-            }
+            _state.update { it.copy(pendingImport = null) }
         } catch (e: Exception) {
             encryptedImport = null
             pendingKdbx = null
-            _state.update {
-                it.copy(busy = false, pendingImport = null, error = "Falha ao importar: ${e.message}")
-            }
+            _state.update { it.copy(pendingImport = null) }
+            failSave(e, R.string.op_import)
         }
     }
 
@@ -417,9 +466,12 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val isNew = repository.vault.items.none { it.id == item.id }
                 val updated = if (isNew) repository.addItem(item) else repository.updateItem(item)
-                persistAndCommit(updated, notice = if (isNew) "Item adicionado." else "Item atualizado.")
+                persistAndCommit(
+                    updated,
+                    notice = str(if (isNew) R.string.msg_item_added else R.string.msg_item_updated),
+                )
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Falha ao salvar o item: ${e.message}", busy = false) }
+                failSave(e, R.string.op_save_item)
             }
         }
     }
@@ -431,9 +483,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(busy = true, error = null) }
             try {
                 val updated = repository.deleteItem(id)
-                persistAndCommit(updated, notice = "Item removido.")
+                persistAndCommit(updated, notice = str(R.string.msg_item_deleted))
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Falha ao remover o item: ${e.message}", busy = false) }
+                failSave(e, R.string.op_delete_item)
             }
         }
     }
@@ -445,7 +497,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 val updated = repository.toggleFavorite(id)
                 persistAndCommit(updated, notice = null)
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Falha ao atualizar o favorito: ${e.message}", busy = false) }
+                failSave(e, R.string.op_favorite)
             }
         }
     }
@@ -459,9 +511,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val folder = Folder(UUID.randomUUID().toString(), name.trim())
                 val updated = repository.addFolder(folder)
-                persistAndCommit(updated, notice = "Pasta criada.")
+                persistAndCommit(updated, notice = str(R.string.msg_folder_created))
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Falha ao criar a pasta: ${e.message}", busy = false) }
+                failSave(e, R.string.op_create_folder)
             }
         }
     }
@@ -473,9 +525,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(busy = true, error = null) }
             try {
                 val updated = repository.renameFolder(id, name.trim())
-                persistAndCommit(updated, notice = "Pasta renomeada.")
+                persistAndCommit(updated, notice = str(R.string.msg_folder_renamed))
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Falha ao renomear a pasta: ${e.message}", busy = false) }
+                failSave(e, R.string.op_rename_folder)
             }
         }
     }
@@ -487,9 +539,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(busy = true, error = null) }
             try {
                 val updated = repository.deleteFolder(id)
-                persistAndCommit(updated, notice = "Pasta excluída.")
+                persistAndCommit(updated, notice = str(R.string.msg_folder_deleted))
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Falha ao excluir a pasta: ${e.message}", busy = false) }
+                failSave(e, R.string.op_delete_folder)
             }
         }
     }
@@ -501,12 +553,12 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
      * nada — se falhou, reescreve uma vez. O estado só é comitado se o arquivo
      * gravado reabre de verdade.
      */
-    private suspend fun persistAndCommit(updated: Vault, notice: String?) {
+    private suspend fun persistAndCommit(updated: Vault, notice: String?, force: Boolean = false) {
         val file = repository.save()
         repository.verifySaved(file) // nunca grava um blob que não reabriria
         val uri = _state.value.vaultUri
-            ?: throw IOException("cofre não está associado a um arquivo")
-        writeAndVerify(getApplication<Application>().contentResolver, Uri.parse(uri), file)
+            ?: throw IOException(str(R.string.err_no_file))
+        writeAndVerify(getApplication<Application>().contentResolver, Uri.parse(uri), file, force)
         syncAutofillCache(updated)
         _state.update { it.copy(vault = updated, busy = false, notice = notice) }
     }
@@ -516,16 +568,77 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
      * (abre com a sessão e confere o conteúdo): se o provider truncou ou
      * corrompeu, reescreve uma vez. Lança [IOException] se o arquivo gravado
      * não reabre — o estado do chamador nunca é comitado nesse caso.
+     *
+     * Antes de gravar, **detecta mudança externa**: se o que está no disco
+     * difere do último estado conhecido ([cachedBlob]), outro dispositivo
+     * sincronizou uma versão nova → lança [ExternalChangeException] em vez de
+     * sobrescrever (a não ser com `force = true`, confirmado pelo usuário).
      */
-    private suspend fun writeAndVerify(resolver: ContentResolver, document: Uri, file: ByteArray) {
+    private suspend fun writeAndVerify(
+        resolver: ContentResolver,
+        document: Uri,
+        file: ByteArray,
+        force: Boolean = false,
+    ) {
         suspend fun writeOnce(): Boolean = withContext(Dispatchers.IO) {
             resolver.openOutputStream(document)?.use { it.write(file) } != null
         }
-        if (!writeOnce()) throw IOException("não foi possível gravar o cofre")
-        if (writtenIsSane(resolver, document)) return
-        if (!writeOnce()) throw IOException("a gravação saiu corrompida e a correção falhou")
-        if (!writtenIsSane(resolver, document)) throw IOException("arquivo gravado não reabre; tente abrir outro cofre")
+        val known = cachedBlob
+        if (!force && known != null) {
+            val currentDisk = readDocumentBytes(resolver, document)
+            // Se não dá pra ler o disco não dá pra comparar; a verificação
+            // pós-gravação continua valendo.
+            if (currentDisk != null && !currentDisk.contentEquals(known)) {
+                throw ExternalChangeException()
+            }
+        }
+        if (!writeOnce()) throw IOException(str(R.string.err_write_failed))
+        if (writtenIsSane(resolver, document)) {
+            cachedBlob = file
+            return
+        }
+        if (!writeOnce()) throw IOException(str(R.string.err_write_retry_failed))
+        if (!writtenIsSane(resolver, document)) throw IOException(str(R.string.err_write_unrecoverable))
+        cachedBlob = file
     }
+
+    /** Lê os bytes do documento SAF (null se não der pra ler). */
+    private suspend fun readDocumentBytes(resolver: ContentResolver, document: Uri): ByteArray? =
+        withContext(Dispatchers.IO) {
+            try {
+                resolver.openInputStream(document)?.use { it.readBytes() }
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+    /**
+     * Tratamento comum de falha de gravação: [ExternalChangeException] vira o
+     * diálogo de conflito; [TkeysError] vira a mensagem mapeada do erro; o
+     * resto vira "contexto: mensagem".
+     */
+    private fun failSave(e: Exception, @StringRes context: Int) {
+        if (e is ExternalChangeException) {
+            _state.update { it.copy(externalChange = true, busy = false) }
+        } else {
+            val detail = if (e is TkeysError) tkeysErrorMessage(e) else (e.message ?: "")
+            _state.update {
+                it.copy(error = str(R.string.msg_op_failed, str(context), detail), busy = false)
+            }
+        }
+    }
+
+    /** Mensagem de erro do `.tkeys` mapeada por tipo (recursos, não o message interno). */
+    private fun tkeysErrorMessage(e: TkeysError): String = when (e) {
+        TkeysError.BadFormat -> str(R.string.tkeys_bad_format)
+        is TkeysError.UnsupportedVersion -> str(R.string.tkeys_unsupported_version, e.version)
+        TkeysError.Kdf -> str(R.string.tkeys_kdf)
+        TkeysError.Decrypt -> str(R.string.tkeys_decrypt)
+        TkeysError.Corrupted -> str(R.string.tkeys_corrupted)
+    }
+
+    private fun str(@StringRes id: Int, vararg args: Any): String =
+        getApplication<Application>().getString(id, *args)
 
     /** Relê o documento e confere que reabre com a sessão e bate com o vault atual. */
     private suspend fun writtenIsSane(resolver: ContentResolver, document: Uri): Boolean {
@@ -613,7 +726,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 else -> VaultExporter.toJson(repository.vault)
             }
         } catch (e: Exception) {
-            _state.update { it.copy(error = "Falha ao preparar o export: ${e.message}") }
+            _state.update { it.copy(error = str(R.string.msg_export_prepare_failed, e.message ?: "")) }
         }
     }
 
@@ -625,10 +738,10 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val written = getApplication<Application>().contentResolver
                     .openOutputStream(uri)?.use { it.write(content.toByteArray(Charsets.UTF_8)) } != null
-                if (!written) throw IOException("não foi possível gravar o export")
-                _state.update { it.copy(notice = "Export salvo. Sem cifra — use só para migrar.") }
+                if (!written) throw IOException(str(R.string.err_write_failed))
+                _state.update { it.copy(notice = str(R.string.msg_export_saved)) }
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Falha ao salvar o export: ${e.message}") }
+                _state.update { it.copy(error = str(R.string.msg_export_save_failed, e.message ?: "")) }
             }
         }
     }

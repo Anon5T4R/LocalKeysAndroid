@@ -51,15 +51,18 @@ object Totp {
         return modulus.toString().padStart(digits, '0')
     }
 
+    /**
+     * Código + tempo restante para o instante `unixSeconds` (função pura do
+     * relógio — quem mostra TOTP chama com o segundo do relógio compartilhado).
+     */
+    fun at(secretB32: String, unixSeconds: Long): TotpCode = TotpCode(
+        code = generate(secretB32, unixSeconds, DIGITS),
+        period = PERIOD,
+        secondsRemaining = PERIOD - (unixSeconds % PERIOD),
+    )
+
     /** Código atual + quanto falta para virar. */
-    fun now(secretB32: String): TotpCode {
-        val unix = System.currentTimeMillis() / 1000
-        return TotpCode(
-            code = generate(secretB32, unix, DIGITS),
-            period = PERIOD,
-            secondsRemaining = PERIOD - (unix % PERIOD),
-        )
-    }
+    fun now(secretB32: String): TotpCode = at(secretB32, System.currentTimeMillis() / 1000)
 
     private fun pow10(n: Int): Int {
         var p = 1

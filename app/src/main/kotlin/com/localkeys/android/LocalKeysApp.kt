@@ -42,6 +42,7 @@ fun LocalKeysApp(
             error = state.error,
             notice = state.notice,
             pendingImport = state.pendingImport,
+            externalChange = state.externalChange,
             onSave = viewModel::save,
             onLock = viewModel::lock,
             onEnableBiometric = { onRequestBiometric(BiometricRequest.Wrap) },
@@ -57,6 +58,9 @@ fun LocalKeysApp(
             onRenameFolder = viewModel::renameFolder,
             onDeleteFolder = viewModel::deleteFolder,
             onNoticeShown = viewModel::consumeNotice,
+            onReloadFromDisk = viewModel::reloadFromDisk,
+            onForceSave = viewModel::forceSave,
+            onDismissExternalChange = viewModel::dismissExternalChange,
             modifier = modifier,
         )
 

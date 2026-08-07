@@ -142,4 +142,64 @@
     <string name="autofill_unlock">Desbloquear o LocalKeys</string>
     <string name="autofill_notify_channel">Autofill</string>
     <string name="autofill_save_locked">Destrave o LocalKeys para salvar credenciais novas.</string>
+
+    <!-- Mensagens do ViewModel (notícias e erros de operação) -->
+    <string name="msg_password_empty">Digite a senha-mestra.</string>
+    <string name="msg_no_vault_loaded">Nenhum cofre carregado.</string>
+    <string name="msg_load_failed">Não foi possível ler o cofre: %1$s</string>
+    <string name="msg_create_failed">Não foi possível criar o cofre: %1$s</string>
+    <string name="msg_vault_saved">Cofre salvo.</string>
+    <string name="msg_op_failed">%1$s: %2$s</string>
+    <string name="op_save">Falha ao salvar</string>
+    <string name="op_save_item">Falha ao salvar o item</string>
+    <string name="op_delete_item">Falha ao remover o item</string>
+    <string name="op_favorite">Falha ao atualizar o favorito</string>
+    <string name="op_create_folder">Falha ao criar a pasta</string>
+    <string name="op_rename_folder">Falha ao renomear a pasta</string>
+    <string name="op_delete_folder">Falha ao excluir a pasta</string>
+    <string name="op_import">Falha ao importar</string>
+    <string name="msg_biometric_enabled">Desbloqueio biométrico ativado.</string>
+    <string name="msg_biometric_changed">Biometria alterada; desbloqueie com a senha.</string>
+    <string name="msg_biometric_failed">Falha na biometria: %1$s</string>
+    <string name="msg_import_password_empty">Digite a senha do export.</string>
+    <string name="msg_import_empty">Nenhum item para importar.</string>
+    <string name="msg_import_empty_in">Nenhum item para importar em %1$s.</string>
+    <string name="msg_imported">%1$d itens importados.</string>
+    <string name="msg_import_generic">Falha ao importar.</string>
+    <string name="import_default_kdbx">cofre KeePass</string>
+    <string name="import_default_bitwarden">export bitwarden</string>
+    <string name="msg_item_added">Item adicionado.</string>
+    <string name="msg_item_updated">Item atualizado.</string>
+    <string name="msg_item_deleted">Item removido.</string>
+    <string name="msg_folder_created">Pasta criada.</string>
+    <string name="msg_folder_renamed">Pasta renomeada.</string>
+    <string name="msg_folder_deleted">Pasta excluída.</string>
+    <string name="msg_export_prepare_failed">Falha ao preparar o export: %1$s</string>
+    <string name="msg_export_saved">Export salvo. Sem cifra — use só para migrar.</string>
+    <string name="msg_export_save_failed">Falha ao salvar o export: %1$s</string>
+    <string name="msg_reloaded">Cofre recarregado do disco.</string>
+    <string name="msg_reload_failed">Falha ao recarregar: %1$s</string>
+
+    <!-- Erros internos de I/O do documento -->
+    <string name="err_file_not_found">arquivo não encontrado</string>
+    <string name="err_no_file">cofre não está associado a um arquivo</string>
+    <string name="err_write_failed">não foi possível gravar o cofre</string>
+    <string name="err_write_retry_failed">a gravação saiu corrompida e a correção falhou</string>
+    <string name="err_write_unrecoverable">arquivo gravado não reabre; tente abrir outro cofre</string>
+
+    <!-- Erros do .tkeys (mapeados por tipo no ViewModel) -->
+    <string name="tkeys_bad_format">arquivo não é um vault .tkeys válido</string>
+    <string name="tkeys_unsupported_version">versão de formato .tkeys não suportada: %1$d</string>
+    <string name="tkeys_kdf">falha ao derivar a chave (KDF)</string>
+    <string name="tkeys_decrypt">senha incorreta ou arquivo corrompido/adulterado</string>
+    <string name="tkeys_corrupted">arquivo corrompido (estrutura inválida)</string>
+
+    <!-- Conflito de sincronização (arquivo mudou fora do app) -->
+    <string name="external_change_title">Arquivo modificado fora do app</string>
+    <string name="external_change_message">O cofre no disco mudou desde que foi aberto — provavelmente outro dispositivo sincronizou uma versão nova (OneDrive/Google Drive). Recarregar descarta suas alterações não salvas e adota a versão do disco; sobrescrever grava a sua versão por cima da outra.</string>
+    <string name="external_change_reload">Recarregar</string>
+    <string name="external_change_overwrite">Sobrescrever</string>
+
+    <!-- Detalhe do item: código TOTP -->
+    <string name="field_totp_code">Código TOTP</string>
 </resources>

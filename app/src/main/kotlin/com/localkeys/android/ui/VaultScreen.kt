@@ -51,9 +51,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -91,6 +92,7 @@ fun VaultScreen(
     error: String?,
     notice: String?,
     pendingImport: PendingImport?,
+    externalChange: Boolean,
     onLock: () -> Unit,
     onSave: () -> Unit,
     onEnableBiometric: () -> Unit,
@@ -106,6 +108,9 @@ fun VaultScreen(
     onRenameFolder: (String, String) -> Unit,
     onDeleteFolder: (String) -> Unit,
     onNoticeShown: () -> Unit,
+    onReloadFromDisk: () -> Unit,
+    onForceSave: () -> Unit,
+    onDismissExternalChange: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -125,6 +130,10 @@ fun VaultScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var folderFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var exportOpen by rememberSaveable { mutableStateOf(false) }
+
+    // Relógio único para todos os TOTP visíveis (lista + dialog): uma corrotina
+    // só, e cada linha que lê o estado recompõe sozinha quando o segundo muda.
+    val totpClock = rememberTotpClock()
 
     LaunchedEffect(notice) {
         if (notice != null) {
@@ -259,6 +268,7 @@ fun VaultScreen(
                 items(visibleItems, key = { it.id }) { item ->
                     ItemRow(
                         item = item,
+                        totpClock = totpClock,
                         onClick = { selected = item },
                         onToggleFavorite = { onToggleFavorite(item.id) },
                     )
@@ -270,6 +280,7 @@ fun VaultScreen(
     selected?.let { item ->
         ItemDetailDialog(
             item = item,
+            totpClock = totpClock,
             onCopy = copy,
             onEdit = {
                 editing = item
@@ -377,6 +388,24 @@ fun VaultScreen(
                 onExport(format)
             },
             onDismiss = { exportOpen = false },
+        )
+    }
+
+    if (externalChange) {
+        AlertDialog(
+            onDismissRequest = onDismissExternalChange,
+            title = { Text(stringResource(R.string.external_change_title)) },
+            text = { Text(stringResource(R.string.external_change_message)) },
+            confirmButton = {
+                TextButton(onClick = onReloadFromDisk) {
+                    Text(stringResource(R.string.external_change_reload))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onForceSave) {
+                    Text(stringResource(R.string.external_change_overwrite))
+                }
+            },
         )
     }
 }
@@ -536,7 +565,7 @@ private fun BiometricCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ItemRow(item: Item, onClick: () -> Unit, onToggleFavorite: () -> Unit) {
+private fun ItemRow(item: Item, totpClock: State<Long>, onClick: () -> Unit, onToggleFavorite: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -562,7 +591,7 @@ private fun ItemRow(item: Item, onClick: () -> Unit, onToggleFavorite: () -> Uni
                         }
                         if (login?.totp?.isNotBlank() == true) {
                             Spacer(Modifier.height(8.dp))
-                            TotpRow(secret = login.totp)
+                            TotpRow(secret = login.totp, clock = totpClock)
                         }
                     }
                     ItemKind.NOTE -> if (item.notes.isNotBlank()) {
@@ -611,31 +640,38 @@ private fun itemIcon(kind: ItemKind): ImageVector = when (kind) {
 }
 
 /**
- * Código TOTP vivo: recompoe a cada segundo. O `tick` de 1 s do `VaultScreen`
- * não alcança os itens da lista (skippables com inputs estáveis) nem o dialog,
- * então quem mostra TOTP mantém o próprio relógio de recomposição.
+ * Relógio compartilhado de todos os TOTP da tela: UMA corrotina atualizando o
+ * segundo atual a cada 1 s, para N linhas. Importante: o que desce para os
+ * itens é o [State] (identidade estável), não o valor — a leitura do valor
+ * acontece dentro do escopo de cada linha/dialog, então só quem mostra TOTP
+ * recompõe a cada segundo (itens skippables da LazyColumn não são alcançados
+ * por recomposição do pai quando só o valor muda).
  */
 @Composable
-private fun rememberTotpCode(secret: String): TotpCode {
-    var tick by remember(secret) { mutableLongStateOf(0L) }
-    LaunchedEffect(secret) {
-        while (true) {
-            delay(1000)
-            tick++
-        }
+private fun rememberTotpClock(): State<Long> = produceState(initialValue = System.currentTimeMillis() / 1000) {
+    while (true) {
+        delay(1000)
+        value = System.currentTimeMillis() / 1000
     }
-    // `tick` como chave do remember marca esta escopo como dependente do tempo;
-    // quando o tick muda, `Totp.now` recalcula com o relógio de parede.
-    return remember(tick) { Totp.now(secret) }
 }
 
 /**
- * Código TOTP atual + barra de tempo restante. Recompute a cada segundo via
+ * Código TOTP vivo: lê o segundo do relógio compartilhado neste escopo (a
+ * leitura assina a recomposição) e deriva o código puro via [Totp.at].
+ */
+@Composable
+private fun rememberTotpCode(secret: String, clock: State<Long>): TotpCode {
+    val now by clock
+    return remember(now, secret) { Totp.at(secret, now) }
+}
+
+/**
+ * Código TOTP atual + barra de tempo restante. Recomputa a cada segundo via
  * [rememberTotpCode], então o código e a barra vivem com a tela parada.
  */
 @Composable
-private fun TotpRow(secret: String) {
-    val code: TotpCode = rememberTotpCode(secret)
+private fun TotpRow(secret: String, clock: State<Long>) {
+    val code: TotpCode = rememberTotpCode(secret, clock)
     Column {
         Text(
             text = code.code,
@@ -655,6 +691,7 @@ private fun TotpRow(secret: String) {
 @Composable
 private fun ItemDetailDialog(
     item: Item,
+    totpClock: State<Long>,
     onCopy: (String) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -700,8 +737,8 @@ private fun ItemDetailDialog(
                         FieldRow(stringResource(R.string.field_password), login.password, login.password, onCopy)
                         login.uris.forEach { uri -> FieldRow(stringResource(R.string.field_uri), uri, uri, onCopy) }
                         if (login.totp.isNotBlank()) {
-                            val code = rememberTotpCode(login.totp)
-                            FieldRow("TOTP", code.code, code.code, onCopy)
+                            val code = rememberTotpCode(login.totp, totpClock)
+                            FieldRow(stringResource(R.string.field_totp_code), code.code, code.code, onCopy)
                         }
                     }
                     ItemKind.NOTE -> FieldRow(stringResource(R.string.field_note), item.notes, item.notes, onCopy)

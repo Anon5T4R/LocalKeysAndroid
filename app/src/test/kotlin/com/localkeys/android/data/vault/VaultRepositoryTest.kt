@@ -396,4 +396,50 @@ class VaultRepositoryTest {
         val repo = VaultRepository(crypto)
         assertThrows(TkeysError.Corrupted::class.java) { repo.unlock(created.file, "senha-do-lixo") }
     }
+
+    // ── Reload (mudança externa: outro dispositivo sincronizou) ──────────
+
+    @Test
+    fun reload_adota_o_vault_gravado_por_outro_dispositivo() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+
+        // "Outro dispositivo": um segundo repositório abre o MESMO arquivo
+        // (mesmo salt → mesma chave derivada) e grava o vault editado.
+        val other = VaultRepository(crypto)
+        other.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        other.addItem(login("ext1", "Do desktop"))
+        val externalBlob = other.save()
+
+        val reloaded = repository.reload(externalBlob)
+        assertEquals(3, reloaded.items.size)
+        assertEquals("Do desktop", repository.vault.items.first { it.id == "ext1" }.name)
+
+        // A sessão sobrevive ao reload: salvar em seguida funciona normal.
+        val saved = repository.save()
+        val reopened = Vault.parse(String(crypto.openVault(TkeysCryptoTest.FIXTURE_PASSWORD, saved).plaintext))
+        assertEquals(3, reopened.items.size)
+    }
+
+    @Test
+    fun reload_de_arquivo_com_outra_senha_falha_com_decrypt() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        // Arquivo recriado com outra senha (outro salt → outra chave): a chave
+        // da sessão atual já não casa.
+        val external = crypto.createVault("outra-senha", Vault.empty().toJson().toByteArray())
+        assertThrows(TkeysError.Decrypt::class.java) { repository.reload(external.file) }
+    }
+
+    @Test
+    fun reload_de_blob_truncado_falha_com_corrupted() {
+        repository.unlock(TkeysCryptoTest.fixtureBytes(), TkeysCryptoTest.FIXTURE_PASSWORD)
+        val truncated = TkeysCryptoTest.fixtureBytes().copyOfRange(0, TkeysFormat.HEADER_LEN + 8)
+        assertThrows(TkeysError.Corrupted::class.java) { repository.reload(truncated) }
+    }
+
+    @Test
+    fun reload_lança_se_o_vault_estiver_trancado() {
+        assertThrows(IllegalStateException::class.java) {
+            repository.reload(TkeysCryptoTest.fixtureBytes())
+        }
+    }
 }
