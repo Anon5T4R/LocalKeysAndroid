@@ -126,15 +126,6 @@ fun VaultScreen(
     var folderFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var exportOpen by rememberSaveable { mutableStateOf(false) }
 
-    // Tick de 1 s para os códigos TOTP ao vivo.
-    var tick by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            tick++
-            delay(1000)
-        }
-    }
-
     LaunchedEffect(notice) {
         if (notice != null) {
             snackbarHostState.showSnackbar(notice)
@@ -621,12 +612,31 @@ private fun itemIcon(kind: ItemKind): ImageVector = when (kind) {
 }
 
 /**
- * Código TOTP atual + barra de tempo restante. Recomputa a cada recomposição
- * (o tick de 1 s do `VaultScreen` recompoe a linha), então o código vive.
+ * Código TOTP vivo: recompoe a cada segundo. O `tick` de 1 s do `VaultScreen`
+ * não alcança os itens da lista (skippables com inputs estáveis) nem o dialog,
+ * então quem mostra TOTP mantém o próprio relógio de recomposição.
+ */
+@Composable
+private fun rememberTotpCode(secret: String): TotpCode {
+    var tick by remember(secret) { mutableLongStateOf(0L) }
+    LaunchedEffect(secret) {
+        while (true) {
+            delay(1000)
+            tick++
+        }
+    }
+    // `tick` como chave do remember marca esta escopo como dependente do tempo;
+    // quando o tick muda, `Totp.now` recalcula com o relógio de parede.
+    return remember(tick) { Totp.now(secret) }
+}
+
+/**
+ * Código TOTP atual + barra de tempo restante. Recompute a cada segundo via
+ * [rememberTotpCode], então o código e a barra vivem com a tela parada.
  */
 @Composable
 private fun TotpRow(secret: String) {
-    val code: TotpCode = Totp.now(secret)
+    val code: TotpCode = rememberTotpCode(secret)
     Column {
         Text(
             text = code.code,
@@ -691,7 +701,7 @@ private fun ItemDetailDialog(
                         FieldRow(stringResource(R.string.field_password), login.password, login.password, onCopy)
                         login.uris.forEach { uri -> FieldRow(stringResource(R.string.field_uri), uri, uri, onCopy) }
                         if (login.totp.isNotBlank()) {
-                            val code = Totp.now(login.totp)
+                            val code = rememberTotpCode(login.totp)
                             FieldRow("TOTP", code.code, code.code, onCopy)
                         }
                     }
